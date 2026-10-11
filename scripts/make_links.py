@@ -11,14 +11,14 @@ import re
 import math
 
 BOT_NAME = "link-dropper"
-UPSTREAM = "seattleschools/media"
+UPSTREAM = "donoEla/daily-linkdrops"
 UPSTREAM_BRANCH = "main"
 
 # ==========================================
 # FOLDER CONFIGURATION & LIMITS
 # ==========================================
-UPSTREAM_FOLDER = "batch/" 
-MAX_PER_REPO = 16000 # Max files per individual GitHub repository
+UPSTREAM_FOLDER = ""  # Root directory of the upstream repo
+MAX_PER_REPO = 16000  # Max files per individual GitHub repository
 # ==========================================
 
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
@@ -50,14 +50,14 @@ if os.path.isfile(AMOUNT_FILE):
     except Exception as e:
         print(f"Warning: Could not parse amount.txt, defaulting to {TOTAL_LINKS:,}: {e}")
 
-# 1. Load previous run state to avoid repeating the same directory
-last_dir = None
+# 1. Load previous run state to avoid repeating the same template file
+last_template = None
 if os.path.isfile(STATE_JSON):
     try:
         with open(STATE_JSON, "r", encoding="utf-8") as f_state:
             state_data = json.load(f_state)
-            last_dir = state_data.get("last_dir")
-            print(f"Loaded previous state: Last used directory was '{last_dir}'")
+            last_template = state_data.get("last_template")
+            print(f"Loaded previous state: Last used template was '{last_template}'")
     except Exception as e:
         print(f"Warning: Could not read state.json: {e}")
 
@@ -86,7 +86,7 @@ else:
 
 date_str = now_utc.strftime("%Y%m%d")
 
-# 2. Fetch upstream tree and pick a random SVG file (excluding the last used directory)
+# 2. Fetch upstream tree and pick a random SVG file from the root
 tree_url = f"https://api.github.com/repos/{UPSTREAM}/git/trees/{UPSTREAM_BRANCH}?recursive=1"
 req_tree = urllib.request.Request(tree_url, headers={"User-Agent": BOT_NAME, "Accept": "application/vnd.github+json"})
 try:
@@ -96,34 +96,29 @@ except Exception as e:
     print(f"Failed to list upstream tree: {e}")
     sys.exit(1)
 
+# Filter root-level SVGs (or any SVGs in the repo if UPSTREAM_FOLDER is empty)
 upstream_svgs = [
     p for p in tree 
     if p["type"] == "blob" 
     and p["path"].lower().endswith(".svg")
-    and p["path"].startswith(UPSTREAM_FOLDER)
+    and (not UPSTREAM_FOLDER or p["path"].startswith(UPSTREAM_FOLDER))
 ]
 
 if not upstream_svgs:
-    print(f"No SVG files found in upstream folder '{UPSTREAM_FOLDER}'.")
+    print(f"No SVG files found in upstream repository '{UPSTREAM}'.")
     sys.exit(1)
 
-def get_parent_dir(path):
-    parts = path.split("/")
-    if len(parts) > 2:
-        return parts[0] + "/" + parts[1]
-    return path
-
+# Exclude the last used template if other choices exist
 filtered_svgs = upstream_svgs
-if last_dir:
-    temp_filtered = [p for p in upstream_svgs if get_parent_dir(p["path"]) != last_dir]
+if last_template:
+    temp_filtered = [p for p in upstream_svgs if p["path"] != last_template]
     if temp_filtered:
         filtered_svgs = temp_filtered
-        print(f"Successfully filtered out previous directory '{last_dir}' to ensure variety.")
+        print(f"Successfully filtered out previous template '{last_template}' to ensure variety.")
 
 random.shuffle(filtered_svgs)
 chosen_svg = random.choice(filtered_svgs)
-chosen_dir = get_parent_dir(chosen_svg["path"])
-print(f"Chosen template for this run: {chosen_svg['path']} (Directory: {chosen_dir})")
+print(f"Chosen template for this run: {chosen_svg['path']}")
 
 raw_download_url = f"{RAW_UPSTREAM_BASE}/{chosen_svg['path']}"
 try:
@@ -134,7 +129,7 @@ except Exception as e:
     print(f"Failed to download template SVG: {e}")
     sys.exit(1)
 
-# 3. Multi-Repo Chunking Loop (Spreads links across multiple repos if total exceeds MAX_PER_REPO)
+# 3. Multi-Repo Chunking Loop
 num_repos = math.ceil(TOTAL_LINKS / MAX_PER_REPO)
 print(f"Total links requested: {TOTAL_LINKS:,}. Splitting across {num_repos} repository/repositories.")
 
@@ -225,9 +220,9 @@ metadata = {
 with open(META_JSON, "w", encoding="utf-8") as f_meta:
     json.dump(metadata, f_meta, indent=2)
 
-# Save state back to main control repo
+# Save current state so the next run knows which template was just used
 os.makedirs(os.path.dirname(STATE_JSON), exist_ok=True)
-state_content = {"last_dir": chosen_dir, "last_template": chosen_svg["path"]}
+state_content = {"last_template": chosen_svg["path"]}
 with open(STATE_JSON, "w", encoding="utf-8") as f_state:
     json.dump(state_content, f_state, indent=2)
 
@@ -237,7 +232,7 @@ subprocess.run(["git", "init"], check=False)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
 subprocess.run(["git", "add", "batch/state.json"], check=True)
-subprocess.run(["git", "commit", "-m", f"Update state: last dir {chosen_dir}"], check=False)
+subprocess.run(["git", "commit", "-m", f"Update state: last template {chosen_svg['path']}"], check=False)
 control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
 subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)
 

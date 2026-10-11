@@ -24,9 +24,8 @@ if not os.path.isfile(links_file):
 
 # Load metadata if available
 repo_name = "unknown-repo"
-template_path = "unknown"
+template_path = "unknown.svg"
 total_links = 16000
-first_link = ""
 
 if os.path.isfile(meta_file):
     try:
@@ -35,52 +34,101 @@ if os.path.isfile(meta_file):
             repo_name = meta.get("repo_name", repo_name)
             template_path = meta.get("template_path", template_path)
             total_links = meta.get("total_links", total_links)
-            first_link = meta.get("first_link", first_link)
     except Exception as e:
         print(f"Warning: Failed to load metadata: {e}")
 
+# Read first 5 links from links.txt for preview
+first_links = []
+with open(links_file, "r", encoding="utf-8") as f:
+    for i, line in enumerate(f):
+        if i < 5:
+            first_links.append(f"{i+1}. {line.strip()}")
+        else:
+            break
+
 repo_url = f"https://github.com/{GH_USER}/{repo_name}"
-jsdelivr_url = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/batch/mass_drop/"
-current_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+raw_github_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/batch/links.txt"
+jsdelivr_url = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/batch/links.txt"
+first_link_url = first_links[0].split(". ", 1)[1] if first_links else repo_url
+
+current_time = datetime.datetime.now(datetime.timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
 
 boundary = "----DiscordWebhookBoundaryInteractiveDrop"
 data = []
 
-# Build a rich, interactive Discord Embed
+# Build the rich embed mimicking your requested layout
 embed = {
-    "title": "🚀 Mass CDN Drop Successfully Deployed!",
-    "description": f"A brand new dynamic repository has been created, populated with **{total_links:,}** cloned assets, and pushed live via jsDelivr.",
-    "color": 0x2ecc71,  # Emerald Green
+    "title": f"✨ Batch Drop: {total_links:,} Links Generated!",
+    "description": f"Successfully compiled and deployed dynamic batch assets into repository **`{repo_name}`**.",
+    "color": 0x5865F2,  # Discord Blurple
     "fields": [
         {
-            "name": "📁 Target Repository",
-            "value": f"[`{repo_name}`]({repo_url})",
+            "name": "GitHub Account",
+            "value": f"`{GH_USER}`",
             "inline": True
         },
         {
-            "name": "📊 Total Generated Links",
-            "value": f"`{total_links:,} files`",
+            "name": "Total Links",
+            "value": f"`{total_links:,} links`",
             "inline": True
         },
         {
-            "name": "🎨 Upstream Template Used",
-            "value": f"`{template_path}`",
+            "name": "Provider",
+            "value": "`jsDelivr / Fastly`",
+            "inline": True
+        },
+        {
+            "name": "Main Site File",
+            "value": f"`{os.path.basename(template_path)}`",
+            "inline": True
+        },
+        {
+            "name": "Repositories Created",
+            "value": f"- [`{repo_name}`]({repo_url})",
             "inline": False
         },
         {
-            "name": "🔗 Quick Action Links",
-            "value": f"• [📦 Open GitHub Repository]({repo_url})\n• [🧪 Test First Link in Browser]({first_link})\n• [⚡ Root jsDelivr CDN Endpoint]({jsdelivr_url})",
+            "name": "Link Preview (First 5)",
+            "value": "\n".join(first_links) if first_links else "No links found.",
             "inline": False
         }
     ],
     "footer": {
-        "text": f"Bot: {BOT_NAME} • Deployed at {current_time}"
+        "text": f"Requested by {GH_USER} • Discord CDN LinkGen • {current_time}"
     }
 }
 
+# Interactive Action Buttons (with external link arrows)
+components = [
+    {
+        "type": 1,  # Action Row
+        "components": [
+            {
+                "type": 2,  # Button
+                "style": 5,  # Link Button (opens URL in browser)
+                "label": "Open GitHub Repo",
+                "url": repo_url
+            },
+            {
+                "type": 2,
+                "style": 5,
+                "label": "Test 1st CDN Link",
+                "url": first_link_url
+            },
+            {
+                "type": 2,
+                "style": 5,
+                "label": "View Raw Links",
+                "url": raw_github_url
+            }
+        ]
+    }
+]
+
 payload = {
-    "content": "🔔 **New Batch Drop Alert!** Check out the live links below:",
-    "embeds": [embed]
+    "content": "📦 **New Automated Drop Ready!** Direct files and interactive options below:",
+    "embeds": [embed],
+    "components": components
 }
 
 data.append(f"--{boundary}\r\n".encode("utf-8"))

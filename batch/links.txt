@@ -1,0 +1,1 @@
+https://raw.githubusercontent.com/YeeglerDiver/sigma-repo-vro/main/batch/state.json

@@ -15,6 +15,8 @@ TOTAL_LINKS = 16000
 GH_USER = "YeeglerDiver"
 
 GH_PAT = os.environ.get("GH_PAT")
+print(f"DEBUG: GH_PAT present = {bool(GH_PAT)}, length = {len(GH_PAT) if GH_PAT else 0}")
+
 if not GH_PAT:
     print("Error: GH_PAT secret is required to create a new repository.")
     sys.exit(1)

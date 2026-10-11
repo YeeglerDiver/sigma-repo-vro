@@ -2,7 +2,7 @@ name: Mass CDN Link Drop
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "*/10 * * * *"   # Runs every 10 minutes
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
       - name: Commit and push changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Mass generate 16k fresh CDN links $(date -u +%Y-%m-%d)"
+          commit_message: "Mass generate 16k fresh CDN links $(date -u +%Y-%m-%d %H:%M)"
           file_pattern: batch/
           commit_user_name: "link-dropper"
           commit_user_email: "link-dropper@users.noreply.github.com"

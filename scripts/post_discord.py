@@ -25,7 +25,7 @@ if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
-newest = links[-10:]
+newest = links[-24000:]
 content = f"**{BOT_NAME} — Daily CDN drop** — {len(links)}/{MAX_LINKS} links total\n" + "\n".join(newest)
 
 # Discord hard-caps message content at 2000 chars

@@ -1,46 +1,61 @@
 #!/usr/bin/env python3
+import json
 import os
 import random
 import sys
+import urllib.request
+
+BOT_NAME = "link-dropper"
+UPSTREAM = "seattleschools/media"
+BRANCH = "main"
+RAW_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{BRANCH}"
+MAX_LINKS = 24000
 
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BATCH_DIR = os.path.join(REPO_ROOT, "batch")
-LINKS_FILE = os.path.join(BATCH_DIR, "links.txt")
-MAX_LINKS = 24000
-RAW_BASE = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'OWNER/REPO')}/main"
+LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 
-if not os.path.isdir(BATCH_DIR):
-    print(f"batch/ not found at {BATCH_DIR}")
-    print(f"Repo root contents: {os.listdir(REPO_ROOT)}")
+# Get the git tree of batch/ in one API call (recursive listing, no clone needed)
+url = f"https://api.github.com/repos/{UPSTREAM}/git/trees/{BRANCH}?recursive=1"
+headers = {
+    "User-Agent": BOT_NAME,   # GitHub API requires a User-Agent; identifies the bot
+    "Accept": "application/vnd.github+json",
+}
+if os.environ.get("GITHUB_TOKEN"):
+    headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+
+req = urllib.request.Request(url, headers=headers)
+try:
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        tree = json.load(resp)["tree"]
+except Exception as e:
+    print(f"Failed to list upstream tree: {e}")
     sys.exit(1)
 
-# List subfolders; fall back to walking batch/ itself if none exist
-folders = sorted(
-    d for d in os.listdir(BATCH_DIR)
-    if os.path.isdir(os.path.join(BATCH_DIR, d))
-)
+# Top-level folders under batch/
+folders = sorted({
+    p["path"].split("/")[1]
+    for p in tree
+    if p["type"] == "blob" and p["path"].startswith("batch/") and "/" in p["path"][6:]
+})
 
-if folders:
-    chosen = random.choice(folders)
-    walk_root = os.path.join(BATCH_DIR, chosen)
-else:
-    print("No subfolders in batch/ — walking batch/ directly.")
-    chosen = "batch"
-    walk_root = BATCH_DIR
+if not folders:
+    print("No files found under batch/ upstream.")
+    sys.exit(1)
 
-print(f"Chosen folder: {chosen}")
+chosen = random.choice(folders)
+print(f"Chosen folder: {chosen} (from {len(folders)} folders)")
 
-urls = []
-for root, dirs, files in os.walk(walk_root):
-    for fname in files:
-        if fname.startswith(".") or fname == "links.txt":
-            continue
-        rel = os.path.relpath(os.path.join(root, fname), REPO_ROOT)
-        urls.append(f"{RAW_BASE}/{rel.replace(os.sep, '/')}")
+prefix = f"batch/{chosen}/"
+urls = [
+    f"{RAW_BASE}/{p['path']}"
+    for p in tree
+    if p["type"] == "blob" and p["path"].startswith(prefix)
+]
 
 urls = urls[:MAX_LINKS]
 
+os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(urls))
 
-print(f"Wrote {len(urls)} links from {chosen} (cap {MAX_LINKS})")
+print(f"Wrote {len(urls)} links (cap {MAX_LINKS})")

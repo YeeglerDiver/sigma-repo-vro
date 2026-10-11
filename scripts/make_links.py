@@ -2,6 +2,7 @@
 import json
 import os
 import random
+import string
 import sys
 import urllib.request
 
@@ -10,10 +11,10 @@ UPSTREAM = "seattleschools/media"
 UPSTREAM_BRANCH = "main"
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
 CDN_BASE = f"https://cdn.jsdelivr.net/gh/YeeglerDiver/sigma-repo-vro@main"
-MAX_LINKS = 16000
-BATCH_SIZE = 30  # Number of SVGs to download and add per run
+TOTAL_LINKS = 16000
 
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOCAL_BATCH_DIR = os.path.join(REPO_ROOT, "batch", "mass_drop")
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 
 # 1. Fetch upstream file list via GitHub API (recursive)
@@ -33,97 +34,53 @@ except Exception as e:
     print(f"Failed to list upstream tree: {e}")
     sys.exit(1)
 
-# Find all top-level folders under batch/
-folders = sorted({
-    p["path"].split("/")[1]
-    for p in tree
-    if p["type"] == "blob" and p["path"].startswith("batch/") and "/" in p["path"][6:]
-})
-
-if not folders:
-    print("No folders found under batch/ upstream.")
-    sys.exit(1)
-
-# Pick a random folder
-chosen_folder = random.choice(folders)
-print(f"Randomly chosen folder: {chosen_folder}")
-
-prefix = f"batch/{chosen_folder}/"
-# Recursively find all SVG files inside this chosen folder and its subfolders
-upstream_files = [
+# Find all SVG files anywhere in the upstream repo
+upstream_svgs = [
     p for p in tree
-    if p["type"] == "blob" and p["path"].startswith(prefix) and p["path"].lower().endswith(".svg")
+    if p["type"] == "blob" and p["path"].lower().endswith(".svg")
 ]
 
-if not upstream_files:
-    print(f"No SVG files found recursively under {prefix} upstream.")
+if not upstream_svgs:
+    print("No SVG files found upstream.")
     sys.exit(1)
 
-# Load existing links, strictly purging any accidental raw.githubusercontent links
-existing_links = []
-if os.path.isfile(LINKS_FILE):
-    with open(LINKS_FILE, "r", encoding="utf-8") as f:
-        existing_links = [
-            line.strip() for line in f 
-            if line.strip() and "raw.githubusercontent.com" not in line
-        ]
+# Pick one single random SVG file to use as the template
+chosen_svg = random.choice(upstream_svgs)
+file_path_in_tree = chosen_svg["path"]
+print(f"Chosen template SVG: {file_path_in_tree}")
 
-if len(existing_links) >= MAX_LINKS:
-    print(f"Reached max limit of {MAX_LINKS} links. Nothing to do.")
-    sys.exit(0)
+# Download the content of that template SVG
+raw_download_url = f"{RAW_UPSTREAM_BASE}/{file_path_in_tree}"
+try:
+    req_file = urllib.request.Request(raw_download_url, headers={"User-Agent": BOT_NAME})
+    with urllib.request.urlopen(req_file, timeout=30) as file_resp:
+        svg_content = file_resp.read()
+except Exception as e:
+    print(f"Failed to download template SVG: {e}")
+    sys.exit(1)
 
-base_local_folder = os.path.join(REPO_ROOT, "batch", chosen_folder)
-os.makedirs(base_local_folder, exist_ok=True)
+os.makedirs(LOCAL_BATCH_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 
-downloaded_count = 0
 new_links = []
+print(f"Generating {TOTAL_LINKS} individual physical files and links...")
 
-for item in upstream_files:
-    if len(existing_links) + len(new_links) >= MAX_LINKS:
-        break
-        
-    file_path_in_tree = item["path"]  # e.g., batch/chosen_folder/subfolder/image.svg
-    rel_path = os.path.relpath(file_path_in_tree, "batch")  # chosen_folder/subfolder/image.svg
-    local_file_path = os.path.join(REPO_ROOT, "batch", rel_path)
+# Create 16,000 unique physical copies with random hashes
+for _ in range(TOTAL_LINKS):
+    rand_hash = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+    filename = f"{rand_hash}.svg"
+    local_file_path = os.path.join(LOCAL_BATCH_DIR, filename)
     
-    # Strictly jsDelivr CDN format including any subfolder paths
-    my_cdn_link = f"{CDN_BASE}/batch/{rel_path}"
-    
-    if my_cdn_link in existing_links:
-        continue
+    # Save physical copy locally
+    with open(local_file_path, "wb") as f_out:
+        f_out.write(svg_content)
         
-    # Ensure local subdirectories exist for recursive layout
-    os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
-    
-    # Download raw bytes from upstream source
-    raw_download_url = f"{RAW_UPSTREAM_BASE}/{file_path_in_tree}"
-    try:
-        req_file = urllib.request.Request(raw_download_url, headers={"User-Agent": BOT_NAME})
-        with urllib.request.urlopen(req_file, timeout=30) as file_resp:
-            file_content = file_resp.read()
-            
-        # Save locally into the matching recursive path
-        with open(local_file_path, "wb") as f_out:
-            f_out.write(file_content)
-            
-        new_links.append(my_cdn_link)
-        downloaded_count += 1
-        print(f"Downloaded and saved recursively: {rel_path}")
-        
-        if downloaded_count >= BATCH_SIZE:
-            break
-    except Exception as e:
-        print(f"Error downloading {file_path_in_tree}: {e}")
+    # Build unique jsDelivr CDN link
+    cdn_link = f"{CDN_BASE}/batch/mass_drop/{filename}"
+    new_links.append(cdn_link)
 
-if not new_links:
-    print("No new recursive SVG files to download.")
-    sys.exit(0)
-
-# Combine existing + new links up to MAX_LINKS
-updated_links = (existing_links + new_links)[:MAX_LINKS]
-
+# Completely replace links.txt (no stacking)
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
-    f.write("\n".join(updated_links) + "\n")
+    f.write("\n".join(new_links) + "\n")
 
-print(f"Added {len(new_links)} new recursive jsDelivr links. Total links: {len(updated_links)}/{MAX_LINKS}")
+print(f"Successfully generated {len(new_links)} fresh links and replaced links.txt.")

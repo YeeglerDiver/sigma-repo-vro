@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 
 BOT_NAME = "link-dropper"
-MAX_LINKS = 24000
+MAX_LINKS = 16000
 
 webhook = os.environ.get("WEBHOOK")
 if not webhook:
@@ -28,39 +28,18 @@ if not links:
 total_links = len(links)
 percentage = min(100.0, (total_links / MAX_LINKS) * 100)
 
-# Generate a clean visual progress bar
-bar_length = 10
-filled_length = int(bar_length * total_links // MAX_LINKS)
-bar = "█" * filled_length + "░" * (bar_length - filled_length)
+# Grab the latest 25 links (safely fitting within Discord's 2000 character limit)
+recent_links = links[-25:]
+links_block = "\n".join(recent_links)
 
-# Grab the latest 5 links for a clean code-block display
-recent_links = links[-5:]
-recent_links_text = "\n".join(recent_links)
+content = f"🚀 **{BOT_NAME} — Daily CDN Drop**\n📊 Progress: **{total_links}** / **{MAX_LINKS}** links ({percentage:.1f}%)\n```text\n{links_block}\n```"
 
-# Build a professional Discord Embed payload
-embed = {
-    "title": "🚀 Daily CDN Link Drop",
-    "color": 5763719,  # Vibrant green accent
-    "fields": [
-        {
-            "name": "📊 Progress & Status",
-            "value": f"`{bar}` **{total_links}** / **{MAX_LINKS}** links ({percentage:.1f}%)",
-            "inline": False
-        },
-        {
-            "name": "🔗 Latest Added Links",
-            "value": f"```text\n{recent_links_text}\n```",
-            "inline": False
-        }
-    ],
-    "footer": {
-        "text": f"{BOT_NAME} • Automated GitHub Sync"
-    }
-}
+# Safety truncate if it ever goes over 2000 chars
+if len(content) > 2000:
+    content = content[:1997] + "..."
 
-payload = json.dumps({"embeds": [embed]}).encode()
+payload = json.dumps({"content": content}).encode()
 
-# Include a full browser User-Agent to bypass Cloudflare's bot check (Error 1010)
 headers = {
     "Content-Type": "application/json",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",

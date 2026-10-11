@@ -196,7 +196,7 @@ for repo_idx in range(1, num_repos + 1):
     subprocess.run(["git", "config", "http.postBuffer", "524288000"], check=True)
     
     subprocess.run(["git", "add", f"batch/mass_drop_{repo_idx}/"], check=True)
-    subprocess.run(["git", "commit", -m, f"Mass drop chunk {repo_idx} ({chunk_size} files)"], check=True)
+    subprocess.run(["git", "commit", "-m", f"Mass drop chunk {repo_idx} ({chunk_size} files)"], check=True)
     
     remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{repo_name}.git"
     subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)

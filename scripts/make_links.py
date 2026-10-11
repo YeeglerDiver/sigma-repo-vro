@@ -7,10 +7,21 @@ REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirnam
 BATCH_DIR = os.path.join(REPO_ROOT, "batch")
 LINKS_FILE = os.path.join(BATCH_DIR, "links.txt")
 MAX_LINKS = 24000
+RAW_BASE = "https://raw.githubusercontent.com/<OWNER>/<REPO>/main"  # adjust to your repo
 
 if not os.path.isdir(BATCH_DIR):
     print(f"batch/ not found at {BATCH_DIR}")
     print(f"Repo root contents: {os.listdir(REPO_ROOT)}")
+    sys.exit(1)
+
+# 1. List subfolders of batch/
+folders = sorted(
+    d for d in os.listdir(BATCH_DIR)
+    if os.path.isdir(os.path.join(BATCH_DIR, d))
+)
+
+if not folders:
+    print("No subfolders found inside batch/.")
     sys.exit(1)
 
 # 2. Pick one at random

@@ -7,32 +7,33 @@ REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirnam
 BATCH_DIR = os.path.join(REPO_ROOT, "batch")
 LINKS_FILE = os.path.join(BATCH_DIR, "links.txt")
 MAX_LINKS = 24000
-RAW_BASE = "https://raw.githubusercontent.com/<OWNER>/<REPO>/main"  # adjust to your repo
+RAW_BASE = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'OWNER/REPO')}/main"
 
 if not os.path.isdir(BATCH_DIR):
     print(f"batch/ not found at {BATCH_DIR}")
     print(f"Repo root contents: {os.listdir(REPO_ROOT)}")
     sys.exit(1)
 
-# 1. List subfolders of batch/
+# List subfolders; fall back to walking batch/ itself if none exist
 folders = sorted(
     d for d in os.listdir(BATCH_DIR)
     if os.path.isdir(os.path.join(BATCH_DIR, d))
 )
 
-if not folders:
-    print("No subfolders found inside batch/.")
-    sys.exit(1)
+if folders:
+    chosen = random.choice(folders)
+    walk_root = os.path.join(BATCH_DIR, chosen)
+else:
+    print("No subfolders in batch/ — walking batch/ directly.")
+    chosen = "batch"
+    walk_root = BATCH_DIR
 
-# 2. Pick one at random
-chosen = random.choice(folders)
 print(f"Chosen folder: {chosen}")
 
-# 3. Walk it and collect file links
 urls = []
-for root, dirs, files in os.walk(os.path.join(BATCH_DIR, chosen)):
+for root, dirs, files in os.walk(walk_root):
     for fname in files:
-        if fname.startswith("."):
+        if fname.startswith(".") or fname == "links.txt":
             continue
         rel = os.path.relpath(os.path.join(root, fname), REPO_ROOT)
         urls.append(f"{RAW_BASE}/{rel.replace(os.sep, '/')}")

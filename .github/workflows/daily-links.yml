@@ -20,34 +20,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate unique repo name, files, and links
+      - name: Generate, commit, and push unique repo CDN drop
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: python scripts/make_links.py
-
-      - name: Push to the newly created unique repository
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: |
-          TARGET_REPO=$(cat batch/.target_repo)
-          echo "Pushing batch to dynamic repository: $TARGET_REPO"
-          
-          # Initialize fresh git state for the new repo
-          rm -rf .git
-          git init
-          git branch -M main
-          
-          # Configure git identity
-          git config user.name "link-dropper"
-          git config user.email "link-dropper@users.noreply.github.com"
-          
-          # Add all generated batch files and links (no date command)
-          git add batch/
-          git commit -m "Mass generate 16k fresh CDN links"
-          
-          # Push directly to the unique repository using your PAT
-          git remote add origin https://x-access-token:${GH_PAT}@github.com/YeeglerDiver/${TARGET_REPO}.git
-          git push -u origin main --force
 
       - name: Post file to Discord
         if: ${{ vars.POST_DISCORD == 'true' }}

@@ -6,6 +6,7 @@ import string
 import sys
 import datetime
 import urllib.request
+import subprocess
 
 BOT_NAME = "link-dropper"
 UPSTREAM = "seattleschools/media"
@@ -22,7 +23,6 @@ if not GH_PAT:
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL_BATCH_DIR = os.path.join(REPO_ROOT, "batch", "mass_drop")
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
-META_FILE = os.path.join(REPO_ROOT, "batch", ".target_repo")
 
 # Generate a unique repo name every run (timezone-aware UTC)
 timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M")
@@ -30,10 +30,6 @@ rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4
 NEW_REPO_NAME = f"sigma-assets-{timestamp}-{rand_suffix}"
 
 print(f"Targeting new unique repository: {NEW_REPO_NAME}")
-
-os.makedirs(os.path.dirname(META_FILE), exist_ok=True)
-with open(META_FILE, "w", encoding="utf-8") as f:
-    f.write(NEW_REPO_NAME)
 
 # 1. Create the unique repository on GitHub via API
 api_url = "https://api.github.com/user/repos"
@@ -105,4 +101,20 @@ for _ in range(TOTAL_LINKS):
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(new_links) + "\n")
 
-print(f"Generated {len(new_links)} links pointing to {NEW_REPO_NAME}.")
+print(f"Generated {len(new_links)} links pointing to {NEW_REPO_NAME}. Pushing to GitHub...")
+
+# 3. Git commit and push directly via Python subprocess
+os.chdir(REPO_ROOT)
+subprocess.run(["rm", "-rf", ".git"], check=False)
+subprocess.run(["git", "init"], check=True)
+subprocess.run(["git", "branch", "-M", "main"], check=True)
+subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
+subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
+subprocess.run(["git", "add", "batch/"], check=True)
+subprocess.run(["git", "commit", "-m", "Mass generate 16k fresh CDN links"], check=True)
+
+remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{NEW_REPO_NAME}.git"
+subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
+subprocess.run(["git", "push", "-u", "origin", "main", "--force"], check=True)
+
+print("Successfully pushed all files to the new unique repository!")

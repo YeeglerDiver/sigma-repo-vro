@@ -20,7 +20,7 @@ UPSTREAM_BRANCH = "main"
 # FOLDER CONFIGURATION & LIMITS
 # ==========================================
 UPSTREAM_FOLDER = ""  # Root directory of the upstream repo
-MAX_PER_REPO = 16000  # Max files per individual GitHub repository
+MAX_PER_REPO = 16000  # Max files per individual GitHub repository (dynamically adjusted if file is large)
 # ==========================================
 
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
@@ -151,6 +151,15 @@ except Exception as e:
     print(f"Failed to download template asset: {e}")
     sys.exit(1)
 
+# Safety check: Prevent disk full error (Errno 28) for large HTML templates
+file_size_bytes = len(asset_content)
+max_safe_bytes_per_repo = 8 * 1024 * 1024 * 1024  # Limit to ~8GB per repo max to fit runner disk
+if file_size_bytes > 0:
+    calculated_max = math.floor(max_safe_bytes_per_repo / file_size_bytes)
+    if calculated_max < MAX_PER_REPO:
+        MAX_PER_REPO = max(100, calculated_max)
+        print(f"Notice: Template file is large ({file_size_bytes / 1024:.1f} KB). Automatically adjusting max files per repo to {MAX_PER_REPO:,} to prevent disk overflow.")
+
 # 3. Multi-Repo Chunking Loop with Disk Cleanup & Smart Hosting Selection
 num_repos = math.ceil(TOTAL_LINKS / MAX_PER_REPO)
 print(f"Total links requested: {TOTAL_LINKS:,} ({file_ext}). Splitting across {num_repos} repository/repositories.")
@@ -184,17 +193,6 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Failed to create repo {repo_name}: {e.code} - {e.read().decode()}")
         sys.exit(1)
         
-    # If it's an HTML file, automatically configure GitHub Pages to use the workflow source build type
-    if file_ext == ".html":
-        pages_url = f"https://api.github.com/repos/{GH_USER}/{repo_name}/pages"
-        pages_payload = json.dumps({"build_type": "workflow", "source": {"branch": "main", "path": "/"}}).encode("utf-8")
-        pages_req = urllib.request.Request(pages_url, data=pages_payload, headers=headers, method="POST")
-        try:
-            urllib.request.urlopen(pages_req)
-            print(f"Enabled GitHub Pages workflow source for {repo_name}")
-        except urllib.error.HTTPError as e:
-            print(f"Note: Could not auto-enable Pages (check token permissions): {e.read().decode()}")
-
     # Generate files for this repo chunk
     repo_batch_dir = os.path.join(REPO_ROOT, "batch", f"mass_drop_{repo_idx}")
     os.makedirs(repo_batch_dir, exist_ok=True)
@@ -238,6 +236,17 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)
         
+    # NOW that the main branch exists, enable GitHub Pages workflow source successfully!
+    if file_ext == ".html":
+        pages_url = f"https://api.github.com/repos/{GH_USER}/{repo_name}/pages"
+        pages_payload = json.dumps({"build_type": "workflow", "source": {"branch": "main", "path": "/"}}).encode("utf-8")
+        pages_req = urllib.request.Request(pages_url, data=pages_payload, headers=headers, method="POST")
+        try:
+            urllib.request.urlopen(pages_req)
+            print(f"Enabled GitHub Pages workflow source for {repo_name}")
+        except urllib.error.HTTPError as e:
+            print(f"Note: Could not auto-enable Pages: {e.read().decode()}")
+
     # Immediately wipe local chunk files to free up runner disk space
     shutil.rmtree(repo_batch_dir, ignore_errors=True)
     print(f"Cleaned up local files for {repo_name}.")

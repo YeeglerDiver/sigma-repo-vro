@@ -184,14 +184,14 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Failed to create repo {repo_name}: {e.code} - {e.read().decode()}")
         sys.exit(1)
         
-    # If it's an HTML file, automatically enable GitHub Pages so it renders as a live website
+    # If it's an HTML file, automatically configure GitHub Pages to use the workflow source build type
     if file_ext == ".html":
         pages_url = f"https://api.github.com/repos/{GH_USER}/{repo_name}/pages"
-        pages_payload = json.dumps({"source": {"branch": "main", "path": "/"}}).encode("utf-8")
+        pages_payload = json.dumps({"build_type": "workflow", "source": {"branch": "main", "path": "/"}}).encode("utf-8")
         pages_req = urllib.request.Request(pages_url, data=pages_payload, headers=headers, method="POST")
         try:
             urllib.request.urlopen(pages_req)
-            print(f"Enabled GitHub Pages for {repo_name}")
+            print(f"Enabled GitHub Pages workflow source for {repo_name}")
         except urllib.error.HTTPError as e:
             print(f"Note: Could not auto-enable Pages (check token permissions): {e.read().decode()}")
 

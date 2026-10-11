@@ -15,8 +15,6 @@ TOTAL_LINKS = 16000
 GH_USER = "YeeglerDiver"
 
 GH_PAT = os.environ.get("GH_PAT")
-print(f"DEBUG: GH_PAT present = {bool(GH_PAT)}, length = {len(GH_PAT) if GH_PAT else 0}")
-
 if not GH_PAT:
     print("Error: GH_PAT secret is required to create a new repository.")
     sys.exit(1)
@@ -24,16 +22,16 @@ if not GH_PAT:
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL_BATCH_DIR = os.path.join(REPO_ROOT, "batch", "mass_drop")
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
-META_FILE = os.path.join(REPO_ROOT, "batch", ".target_repo")  # Saved for git push step
+META_FILE = os.path.join(REPO_ROOT, "batch", ".target_repo")
 
-# Generate a unique repo name every run (e.g., sigma-assets-202610111230-k9x2)
-timestamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M")
+# Generate a unique repo name every run (timezone-aware UTC)
+timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M")
 rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
 NEW_REPO_NAME = f"sigma-assets-{timestamp}-{rand_suffix}"
 
 print(f"Targeting new unique repository: {NEW_REPO_NAME}")
 
-# Save repo name so workflow can read it for pushing
+os.makedirs(os.path.dirname(META_FILE), exist_ok=True)
 with open(META_FILE, "w", encoding="utf-8") as f:
     f.write(NEW_REPO_NAME)
 
@@ -41,7 +39,7 @@ with open(META_FILE, "w", encoding="utf-8") as f:
 api_url = "https://api.github.com/user/repos"
 payload = json.dumps({
     "name": NEW_REPO_NAME,
-    "private": False,  # Set to True if you want them private
+    "private": False,
     "auto_init": False
 }).encode("utf-8")
 

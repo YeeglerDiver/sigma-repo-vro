@@ -2,8 +2,8 @@ name: Daily CDN Link Drop
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # daily at 06:00 UTC
-  workflow_dispatch:       # allow manual runs from the Actions tab
+    - cron: "0 6 * * *"   # Runs daily at 06:00 UTC
+  workflow_dispatch:       # Allows manual runs from your GitHub Actions tab
 
 permissions:
   contents: write
@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate CDN links and download SVGs
+      - name: Generate CDN links and download SVGs recursively
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/make_links.py
@@ -28,8 +28,8 @@ jobs:
       - name: Commit and push changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Daily SVG drop $(date -u +%Y-%m-%d)"
-          file_pattern: batch/   # Stages both the downloaded SVGs under batch/ and links.txt
+          commit_message: "Daily recursive SVG drop $(date -u +%Y-%m-%d)"
+          file_pattern: batch/   # Tracks all downloaded folders and links.txt
           commit_user_name: "link-dropper"
           commit_user_email: "link-dropper@users.noreply.github.com"
 

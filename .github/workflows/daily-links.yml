@@ -34,6 +34,7 @@ jobs:
             echo "No changes."
           else
             git commit -m "Daily link drop $(date -u +%Y-%m-%d)"
+            git pull origin main --rebase
             git push
           fi
 

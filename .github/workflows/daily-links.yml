@@ -36,7 +36,7 @@ jobs:
           fi
 
       - name: Post batch to Discord
-        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ vars.POST_DISCORD == 'true' }}
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |

@@ -8,7 +8,7 @@ import urllib.request
 BOT_NAME = "link-dropper"
 UPSTREAM = "seattleschools/media"
 BRANCH = "main"
-RAW_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{BRANCH}"
+RAW_BASE = f"https://cdn.jsdelivr.net/gh/{UPSTREAM}@{BRANCH}"
 MAX_LINKS = 24000
 
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

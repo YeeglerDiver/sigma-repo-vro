@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 import os
 import random
+import sys
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RAW_BASE = "https://raw.githubusercontent.com/seattleschools/media/main"
+REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BATCH_DIR = os.path.join(REPO_ROOT, "batch")
-LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
+LINKS_FILE = os.path.join(BATCH_DIR, "links.txt")
 MAX_LINKS = 24000
 
-# 1. List all subfolders under batch/
-folders = [d for d in os.listdir(BATCH_DIR)
-           if os.path.isdir(os.path.join(BATCH_DIR, d))
-           and not d.startswith((".", "_"))]   # skip hidden/meta dirs like ".git"
-
-if not folders:
-    raise SystemExit("No folders found in batch/")
+if not os.path.isdir(BATCH_DIR):
+    print(f"batch/ not found at {BATCH_DIR}")
+    print(f"Repo root contents: {os.listdir(REPO_ROOT)}")
+    sys.exit(1)
 
 # 2. Pick one at random
 chosen = random.choice(folders)

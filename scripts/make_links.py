@@ -226,8 +226,8 @@ for repo_idx in range(1, num_repos + 1):
     for f_name in os.listdir(repo_batch_dir):
         shutil.move(os.path.join(repo_batch_dir, f_name), os.path.join(REPO_ROOT, f_name))
     
-    # Stage all root-level files
-    subprocess.run(["git", "add", "."], check=True)
+    # Stage ONLY the generated asset files (prevents staging control repo workflows)
+    subprocess.run(["git", "add", f"*{file_ext}"], check=True)
     subprocess.run(["git", "commit", "-m", f"Mass drop root chunk {repo_idx} ({chunk_size} files)"], check=True)
     
     remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{repo_name}.git"

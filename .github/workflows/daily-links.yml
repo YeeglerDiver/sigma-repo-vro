@@ -2,7 +2,7 @@ name: Dynamic Unique Repo CDN Drop
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "0 * * * *"   # <--- Changed from "*/10 * * * *" to run at the start of every hour
   workflow_dispatch:
 
 permissions:

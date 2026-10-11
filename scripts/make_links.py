@@ -35,6 +35,7 @@ REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirnam
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 PREFIX_FILE = os.path.join(REPO_ROOT, "repo_prefix.txt")
 AMOUNT_FILE = os.path.join(REPO_ROOT, "amount.txt")
+TYPE_FILE = os.path.join(REPO_ROOT, "type.txt")
 META_JSON = os.path.join(REPO_ROOT, "batch", ".metadata.json")
 STATE_JSON = os.path.join(REPO_ROOT, "batch", "state.json")
 
@@ -50,6 +51,21 @@ if os.path.isfile(AMOUNT_FILE):
                 print(f"Loaded custom link amount from amount.txt: {TOTAL_LINKS:,}")
     except Exception as e:
         print(f"Warning: Could not parse amount.txt, defaulting to {TOTAL_LINKS:,}: {e}")
+
+# Determine allowed asset extensions from type.txt (Default: both .svg and .html)
+allowed_exts = (".svg", ".html")
+if os.path.isfile(TYPE_FILE):
+    try:
+        with open(TYPE_FILE, "r", encoding="utf-8") as f_type:
+            type_content = f_type.read().strip().lower()
+            if "svg" in type_content and "html" not in type_content:
+                allowed_exts = (".svg",)
+                print("Loaded filter from type.txt: Restricting search to .svg files only.")
+            elif "html" in type_content and "svg" not in type_content:
+                allowed_exts = (".html",)
+                print("Loaded filter from type.txt: Restricting search to .html files only.")
+    except Exception as e:
+        print(f"Warning: Could not parse type.txt, allowing both .svg and .html: {e}")
 
 # 1. Load previous run state to avoid repeating the same template file
 last_template = None
@@ -87,7 +103,7 @@ else:
 
 date_str = now_utc.strftime("%Y%m%d")
 
-# 2. Fetch upstream tree and pick a random asset (.svg or .html) from the root
+# 2. Fetch upstream tree and pick a random asset matching allowed_exts from the root
 tree_url = f"https://api.github.com/repos/{UPSTREAM}/git/trees/{UPSTREAM_BRANCH}?recursive=1"
 req_tree = urllib.request.Request(tree_url, headers={"User-Agent": BOT_NAME, "Accept": "application/vnd.github+json"})
 try:
@@ -100,12 +116,12 @@ except Exception as e:
 upstream_assets = [
     p for p in tree 
     if p["type"] == "blob" 
-    and p["path"].lower().endswith((".svg", ".html"))
+    and p["path"].lower().endswith(allowed_exts)
     and (not UPSTREAM_FOLDER or p["path"].startswith(UPSTREAM_FOLDER))
 ]
 
 if not upstream_assets:
-    print(f"No valid .svg or .html files found in upstream repository '{UPSTREAM}'.")
+    print(f"No matching files found in upstream repository '{UPSTREAM}' with filter '{allowed_exts}'.")
     sys.exit(1)
 
 # Exclude the last used template if other choices exist

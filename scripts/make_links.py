@@ -208,6 +208,9 @@ subprocess.run(["git", "branch", "-M", "main"], check=True)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
 
+# Increase Git HTTP postBuffer to handle large 16,000-file payloads without crashing
+subprocess.run(["git", "config", "http.postBuffer", "524288000"], check=True)
+
 subprocess.run(["git", "add", "batch/mass_drop/", "batch/links.txt", "batch/.metadata.json"], check=True)
 subprocess.run(["git", "commit", "-m", f"Mass generate 16k links from {chosen_svg['path']}"], check=True)
 

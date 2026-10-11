@@ -25,14 +25,40 @@ if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
-newest = links[-24000:]
-content = f"**{BOT_NAME} — Daily CDN drop** — {len(links)}/{MAX_LINKS} links total\n" + "\n".join(newest)
+total_links = len(links)
+percentage = min(100.0, (total_links / MAX_LINKS) * 100)
 
-# Discord hard-caps message content at 2000 chars
-if len(content) > 2000:
-    content = content[:1997] + "..."
+# Generate a clean visual progress bar
+bar_length = 10
+filled_length = int(bar_length * total_links // MAX_LINKS)
+bar = "█" * filled_length + "░" * (bar_length - filled_length)
 
-payload = json.dumps({"content": content}).encode()
+# Grab the latest 5 links for a clean code-block display
+recent_links = links[-5:]
+recent_links_text = "\n".join(recent_links)
+
+# Build a professional Discord Embed payload
+embed = {
+    "title": "🚀 Daily CDN Link Drop",
+    "color": 5763719,  # Vibrant green accent
+    "fields": [
+        {
+            "name": "📊 Progress & Status",
+            "value": f"`{bar}` **{total_links}** / **{MAX_LINKS}** links ({percentage:.1f}%)",
+            "inline": False
+        },
+        {
+            "name": "🔗 Latest Added Links",
+            "value": f"```text\n{recent_links_text}\n```",
+            "inline": False
+        }
+    ],
+    "footer": {
+        "text": f"{BOT_NAME} • Automated GitHub Sync"
+    }
+}
+
+payload = json.dumps({"embeds": [embed]}).encode()
 
 # Include a full browser User-Agent to bypass Cloudflare's bot check (Error 1010)
 headers = {

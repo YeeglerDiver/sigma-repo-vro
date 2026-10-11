@@ -1,0 +1,43 @@
+name: Daily CDN Link Drop
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # daily at 06:00 UTC (adjust as you like)
+  workflow_dispatch:       # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate CDN links
+        run: python scripts/make_links.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "link-drop-bot"
+          git config user.email "actions@github.com"
+          git add batch/
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Daily link drop $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Post batch to Discord
+        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python scripts/post_discord.py

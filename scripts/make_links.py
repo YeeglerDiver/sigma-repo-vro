@@ -47,12 +47,21 @@ if os.path.isfile(PREFIX_FILE):
             chosen_words = random.sample(words, num_to_pick)
             custom_prefix = "-".join(chosen_words)
 
-# Generate a unique repo name using your randomized word combination (timezone-aware UTC)
-timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M")
-rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
-NEW_REPO_NAME = f"{custom_prefix}-{timestamp_str}-{rand_suffix}"
+# Determine time slot (morning, midday, afternoon) based on current UTC hour
+now_utc = datetime.datetime.now(datetime.timezone.utc)
+hour = now_utc.hour
+if hour < 11:
+    time_slot = "morning"
+elif hour < 16:
+    time_slot = "midday"
+else:
+    time_slot = "afternoon"
 
-print(f"Targeting new unique repository: {NEW_REPO_NAME} (using prefix words: '{custom_prefix}')")
+date_str = now_utc.strftime("%Y%m%d")
+rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+NEW_REPO_NAME = f"{custom_prefix}-{date_str}-{time_slot}-{rand_suffix}"
+
+print(f"Targeting new unique repository: {NEW_REPO_NAME} (slot: {time_slot})")
 
 # 1. Create the unique repository on GitHub via API
 api_url = "https://api.github.com/user/repos"

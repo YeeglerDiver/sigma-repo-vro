@@ -11,6 +11,16 @@ import subprocess
 BOT_NAME = "link-dropper"
 UPSTREAM = "seattleschools/media"
 UPSTREAM_BRANCH = "main"
+
+# ==========================================
+# FOLDER CONFIGURATION
+# ==========================================
+# Set this to a specific folder path if you want to restrict selection 
+# (e.g., "logos/" or "vectors/"). Leave it as "" if you want it to pick 
+# a random SVG from anywhere in the upstream repository.
+UPSTREAM_FOLDER = "" 
+# ==========================================
+
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
 TOTAL_LINKS = 16000
 GH_USER = "YeeglerDiver"
@@ -54,7 +64,7 @@ except urllib.error.HTTPError as e:
     print(f"Failed to create repo via API ({e.code}): {e.read().decode()}")
     sys.exit(1)
 
-# 2. Fetch upstream template SVG
+# 2. Fetch upstream tree and pick one random SVG file
 tree_url = f"https://api.github.com/repos/{UPSTREAM}/git/trees/{UPSTREAM_BRANCH}?recursive=1"
 req_tree = urllib.request.Request(tree_url, headers={"User-Agent": BOT_NAME, "Accept": "application/vnd.github+json"})
 try:
@@ -64,12 +74,20 @@ except Exception as e:
     print(f"Failed to list upstream tree: {e}")
     sys.exit(1)
 
-upstream_svgs = [p for p in tree if p["type"] == "blob" and p["path"].lower().endswith(".svg")]
+# Filter SVGs based on whether a folder was specified
+upstream_svgs = [
+    p for p in tree 
+    if p["type"] == "blob" 
+    and p["path"].lower().endswith(".svg")
+    and (not UPSTREAM_FOLDER or p["path"].startswith(UPSTREAM_FOLDER))
+]
+
 if not upstream_svgs:
-    print("No SVG files found upstream.")
+    print(f"No SVG files found matching upstream folder '{UPSTREAM_FOLDER}'.")
     sys.exit(1)
 
 chosen_svg = random.choice(upstream_svgs)
+print(f"Chosen template for this run: {chosen_svg['path']}")
 raw_download_url = f"{RAW_UPSTREAM_BASE}/{chosen_svg['path']}"
 
 try:
@@ -86,7 +104,7 @@ os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 new_links = []
 CDN_BASE = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{NEW_REPO_NAME}@main"
 
-print(f"Generating {TOTAL_LINKS} physical files...")
+print(f"Generating {TOTAL_LINKS} physical files using template: {chosen_svg['path']}...")
 for _ in range(TOTAL_LINKS):
     rand_hash = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
     filename = f"{rand_hash}.svg"
@@ -101,7 +119,7 @@ for _ in range(TOTAL_LINKS):
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(new_links) + "\n")
 
-print(f"Generated {len(new_links)} links pointing to {NEW_REPO_NAME}. Pushing to GitHub...")
+print(f"Generated {len(new_links)} links. Pushing to GitHub...")
 
 # 3. Git commit and push directly via Python subprocess
 os.chdir(REPO_ROOT)
@@ -111,7 +129,7 @@ subprocess.run(["git", "branch", "-M", "main"], check=True)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
 subprocess.run(["git", "add", "batch/"], check=True)
-subprocess.run(["git", "commit", "-m", "Mass generate 16k fresh CDN links"], check=True)
+subprocess.run(["git", "commit", "-m", f"Mass generate 16k links from {chosen_svg['path']}"], check=True)
 
 remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{NEW_REPO_NAME}.git"
 subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)

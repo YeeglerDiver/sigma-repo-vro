@@ -7,6 +7,7 @@ import sys
 import datetime
 import urllib.request
 import subprocess
+import re
 
 BOT_NAME = "link-dropper"
 UPSTREAM = "seattleschools/media"
@@ -15,9 +16,6 @@ UPSTREAM_BRANCH = "main"
 # ==========================================
 # FOLDER CONFIGURATION
 # ==========================================
-# Set this to a specific folder path if you want to restrict selection 
-# (e.g., "logos/" or "vectors/"). Leave it as "" if you want it to pick 
-# a random SVG from anywhere in the upstream repository.
 UPSTREAM_FOLDER = "" 
 # ==========================================
 
@@ -33,13 +31,29 @@ if not GH_PAT:
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL_BATCH_DIR = os.path.join(REPO_ROOT, "batch", "mass_drop")
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
+PREFIX_FILE = os.path.join(REPO_ROOT, "repo_prefix.txt")
 
-# Generate a unique repo name every run (timezone-aware UTC)
+# Read words from repo_prefix.txt and randomly pick at least 3 words
+custom_prefix = "sigma-assets"
+if os.path.isfile(PREFIX_FILE):
+    with open(PREFIX_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
+        # Extract all alphanumeric words regardless of spaces, commas, or quotes
+        raw_words = re.findall(r'[a-zA-Z0-9]+', content)
+        words = [w.lower() for w in raw_words if w]
+        
+        if words:
+            # Pick a random number of words (at least 3, or all available if you have fewer than 3)
+            num_to_pick = random.randint(3, len(words)) if len(words) >= 3 else len(words)
+            chosen_words = random.sample(words, num_to_pick)
+            custom_prefix = "-".join(chosen_words)
+
+# Generate a unique repo name using your randomized word combination (timezone-aware UTC)
 timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M")
 rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
-NEW_REPO_NAME = f"sigma-assets-{timestamp}-{rand_suffix}"
+NEW_REPO_NAME = f"{custom_prefix}-{timestamp}-{rand_suffix}"
 
-print(f"Targeting new unique repository: {NEW_REPO_NAME}")
+print(f"Targeting new unique repository: {NEW_REPO_NAME} (using prefix words: '{custom_prefix}')")
 
 # 1. Create the unique repository on GitHub via API
 api_url = "https://api.github.com/user/repos"
@@ -74,7 +88,6 @@ except Exception as e:
     print(f"Failed to list upstream tree: {e}")
     sys.exit(1)
 
-# Filter SVGs based on whether a folder was specified
 upstream_svgs = [
     p for p in tree 
     if p["type"] == "blob" 

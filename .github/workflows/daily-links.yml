@@ -25,19 +25,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/make_links.py
 
-      - name: Commit and push
-        run: |
-          git config user.name "link-dropper"
-          git config user.email "link-dropper@users.noreply.github.com"
-          git add batch/links.txt
-          if git diff --cached --quiet; then
-            echo "No changes."
-          else
-            git commit -m "Daily link drop $(date -u +%Y-%m-%d)"
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
-          fi
+      - name: Commit and push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Daily link drop $(date -u +%Y-%m-%d)"
+          file_pattern: batch/links.txt
+          commit_user_name: "link-dropper"
+          commit_user_email: "link-dropper@users.noreply.github.com"
 
       - name: Post batch to Discord
         if: ${{ vars.POST_DISCORD == 'true' }}

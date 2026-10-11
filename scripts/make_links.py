@@ -1,54 +1,47 @@
 #!/usr/bin/env python3
-import json
+import datetime
 import os
+import random
+import string
 import sys
-import urllib.request
 
 BOT_NAME = "link-dropper"
-UPSTREAM = "seattleschools/media"
-BRANCH = "main"
-RAW_BASE = f"https://cdn.jsdelivr.net/gh/{UPSTREAM}@{BRANCH}"
 MAX_LINKS = 24000
-
-# Locked to your chosen folder so it repeats the same one every time
-CHOSEN_FOLDER = "smokingonzaandcoke"
+BATCH_SIZE = 30  # How many fresh links to create each day
 
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 
-# Get the git tree of batch/ in one API call (recursive listing, no clone needed)
-url = f"https://api.github.com/repos/{UPSTREAM}/git/trees/{BRANCH}?recursive=1"
-headers = {
-    "User-Agent": BOT_NAME,    # GitHub API requires a User-Agent; identifies the bot
-    "Accept": "application/vnd.github+json",
-}
-if os.environ.get("GITHUB_TOKEN"):
-    headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+# Load existing links
+existing_links = []
+if os.path.isfile(LINKS_FILE):
+    with open(LINKS_FILE, "r", encoding="utf-8") as f:
+        existing_links = [line.strip() for line in f if line.strip()]
 
-req = urllib.request.Request(url, headers=headers)
-try:
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        tree = json.load(resp)["tree"]
-except Exception as e:
-    print(f"Failed to list upstream tree: {e}")
-    sys.exit(1)
+if len(existing_links) >= MAX_LINKS:
+    print(f"Reached max limit of {MAX_LINKS} links. Nothing to create.")
+    sys.exit(0)
 
-prefix = f"batch/{CHOSEN_FOLDER}/"
-urls = [
-    f"{RAW_BASE}/{p['path']}"
-    for p in tree
-    if p["type"] == "blob" and p["path"].startswith(prefix)
-]
+# Generate a batch of brand-new, unique links using random strings and timestamps
+today_str = datetime.datetime.utcnow().strftime("%Y%m%d")
+new_batch = []
 
-if not urls:
-    print(f"No files found under {prefix} upstream.")
-    sys.exit(1)
+for _ in range(BATCH_SIZE):
+    # Create a unique random hash/string for this new link
+    random_hash = ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
+    
+    # Construct a custom unique CDN link based on your repo
+    # (jsDelivr serves files from your repo: cdn.jsdelivr.net/gh/USERNAME/REPO@main/path/file)
+    unique_link = f"https://cdn.jsdelivr.net/gh/YeeglerDiver/sigma-repo-vro@main/batch/generated/{today_str}_{random_hash}.txt"
+    
+    if unique_link not in existing_links:
+        new_batch.append(unique_link)
 
-urls = urls[:MAX_LINKS]
+# Combine existing links with the new batch up to the cap
+updated_links = (existing_links + new_batch)[:MAX_LINKS]
 
 os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
-    f.write("\n".join(urls))
+    f.write("\n".join(updated_links) + "\n")
 
-print(f"Chosen folder: {CHOSEN_FOLDER} (locked)")
-print(f"Wrote {len(urls)} links (cap {MAX_LINKS})")
+print(f"Created {len(new_batch)} fresh links today. Total: {len(updated_links)}/{MAX_LINKS}")

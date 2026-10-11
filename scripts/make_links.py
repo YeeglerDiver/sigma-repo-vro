@@ -9,6 +9,7 @@ import urllib.request
 import subprocess
 import re
 import math
+import shutil
 
 BOT_NAME = "link-dropper"
 UPSTREAM = "donoEla/daily-linkdrops"
@@ -30,7 +31,6 @@ if not GH_PAT:
     sys.exit(1)
 
 REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOCAL_BATCH_DIR = os.path.join(REPO_ROOT, "batch", "mass_drop")
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 PREFIX_FILE = os.path.join(REPO_ROOT, "repo_prefix.txt")
 AMOUNT_FILE = os.path.join(REPO_ROOT, "amount.txt")
@@ -96,7 +96,6 @@ except Exception as e:
     print(f"Failed to list upstream tree: {e}")
     sys.exit(1)
 
-# Filter root-level SVGs (or any SVGs in the repo if UPSTREAM_FOLDER is empty)
 upstream_svgs = [
     p for p in tree 
     if p["type"] == "blob" 
@@ -129,7 +128,7 @@ except Exception as e:
     print(f"Failed to download template SVG: {e}")
     sys.exit(1)
 
-# 3. Multi-Repo Chunking Loop
+# 3. Multi-Repo Chunking Loop with Disk Cleanup
 num_repos = math.ceil(TOTAL_LINKS / MAX_PER_REPO)
 print(f"Total links requested: {TOTAL_LINKS:,}. Splitting across {num_repos} repository/repositories.")
 
@@ -200,6 +199,10 @@ for repo_idx in range(1, num_repos + 1):
     if push_result.returncode != 0:
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)
+        
+    # Immediately wipe local chunk files to free up runner disk space & inodes
+    shutil.rmtree(repo_batch_dir, ignore_errors=True)
+    print(f"Cleaned up local files for {repo_name} to free disk space.")
         
     created_repos.append(repo_name)
     remaining_links -= chunk_size

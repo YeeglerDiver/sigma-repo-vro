@@ -196,7 +196,7 @@ subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
 subprocess.run(["git", "add", "batch/state.json"], check=True)
 subprocess.run(["git", "commit", "-m", f"Update state: last dir {chosen_dir}"], check=False)
-control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git" # Replace with your control repo name if different
+control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
 subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)
 
 print(f"Generated {len(new_links)} links. Pushing to new dynamic repository {NEW_REPO_NAME}...")
@@ -214,7 +214,7 @@ subprocess.run(["git", "commit", "-m", f"Mass generate 16k links from {chosen_sv
 remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{NEW_REPO_NAME}.git"
 subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
 
-push_result = subprocess.run(["git", "push", -u, "origin", "main", "--force"])
+push_result = subprocess.run(["git", "push", "-u", "origin", "main", "--force"])
 if push_result.returncode != 0:
     print("Error: Git push to dynamic repo failed!")
     sys.exit(1)

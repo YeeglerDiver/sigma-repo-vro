@@ -86,7 +86,7 @@ else:
 
 date_str = now_utc.strftime("%Y%m%d")
 
-# 2. Fetch upstream tree and pick a random SVG file from the root
+# 2. Fetch upstream tree and pick a random asset (.svg or .html) from the root
 tree_url = f"https://api.github.com/repos/{UPSTREAM}/git/trees/{UPSTREAM_BRANCH}?recursive=1"
 req_tree = urllib.request.Request(tree_url, headers={"User-Agent": BOT_NAME, "Accept": "application/vnd.github+json"})
 try:
@@ -96,41 +96,44 @@ except Exception as e:
     print(f"Failed to list upstream tree: {e}")
     sys.exit(1)
 
-upstream_svgs = [
+upstream_assets = [
     p for p in tree 
     if p["type"] == "blob" 
-    and p["path"].lower().endswith(".svg")
+    and p["path"].lower().endswith((".svg", ".html"))
     and (not UPSTREAM_FOLDER or p["path"].startswith(UPSTREAM_FOLDER))
 ]
 
-if not upstream_svgs:
-    print(f"No SVG files found in upstream repository '{UPSTREAM}'.")
+if not upstream_assets:
+    print(f"No valid .svg or .html files found in upstream repository '{UPSTREAM}'.")
     sys.exit(1)
 
 # Exclude the last used template if other choices exist
-filtered_svgs = upstream_svgs
+filtered_assets = upstream_assets
 if last_template:
-    temp_filtered = [p for p in upstream_svgs if p["path"] != last_template]
+    temp_filtered = [p for p in upstream_assets if p["path"] != last_template]
     if temp_filtered:
-        filtered_svgs = temp_filtered
+        filtered_assets = temp_filtered
         print(f"Successfully filtered out previous template '{last_template}' to ensure variety.")
 
-random.shuffle(filtered_svgs)
-chosen_svg = random.choice(filtered_svgs)
-print(f"Chosen template for this run: {chosen_svg['path']}")
+random.shuffle(filtered_assets)
+chosen_asset = random.choice(filtered_assets)
+print(f"Chosen template for this run: {chosen_asset['path']}")
 
-raw_download_url = f"{RAW_UPSTREAM_BASE}/{chosen_svg['path']}"
+# Determine file extension (.svg or .html)
+file_ext = os.path.splitext(chosen_asset["path"])[1].lower()
+
+raw_download_url = f"{RAW_UPSTREAM_BASE}/{chosen_asset['path']}"
 try:
     req_file = urllib.request.Request(raw_download_url, headers={"User-Agent": BOT_NAME})
     with urllib.request.urlopen(req_file, timeout=30) as file_resp:
-        svg_content = file_resp.read()
+        asset_content = file_resp.read()
 except Exception as e:
-    print(f"Failed to download template SVG: {e}")
+    print(f"Failed to download template asset: {e}")
     sys.exit(1)
 
-# 3. Multi-Repo Chunking Loop with Disk Cleanup
+# 3. Multi-Repo Chunking Loop with Disk Cleanup & Smart Hosting Selection
 num_repos = math.ceil(TOTAL_LINKS / MAX_PER_REPO)
-print(f"Total links requested: {TOTAL_LINKS:,}. Splitting across {num_repos} repository/repositories.")
+print(f"Total links requested: {TOTAL_LINKS:,} ({file_ext}). Splitting across {num_repos} repository/repositories.")
 
 all_links = []
 created_repos = []
@@ -161,22 +164,37 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Failed to create repo {repo_name}: {e.code} - {e.read().decode()}")
         sys.exit(1)
         
+    # If it's an HTML file, automatically enable GitHub Pages so it renders as a live website
+    if file_ext == ".html":
+        pages_url = f"https://api.github.com/repos/{GH_USER}/{repo_name}/pages"
+        pages_payload = json.dumps({"source": {"branch": "main", "path": "/"}}).encode("utf-8")
+        pages_req = urllib.request.Request(pages_url, data=pages_payload, headers=headers, method="POST")
+        try:
+            urllib.request.urlopen(pages_req)
+            print(f"Enabled GitHub Pages for {repo_name}")
+        except urllib.error.HTTPError as e:
+            print(f"Note: Could not auto-enable Pages (check token permissions): {e.read().decode()}")
+
     # Generate files for this repo chunk
     repo_batch_dir = os.path.join(REPO_ROOT, "batch", f"mass_drop_{repo_idx}")
     os.makedirs(repo_batch_dir, exist_ok=True)
     
-    cdn_base = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main"
     chunk_links = []
     
     for _ in range(chunk_size):
         rand_hash = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
-        filename = f"{rand_hash}.svg"
+        filename = f"{rand_hash}{file_ext}"
         local_file_path = os.path.join(repo_batch_dir, filename)
         
         with open(local_file_path, "wb") as f_out:
-            f_out.write(svg_content)
+            f_out.write(asset_content)
             
-        cdn_link = f"{cdn_base}/batch/{os.path.basename(repo_batch_dir)}/{filename}"
+        # Build the correct link based on whether it's HTML (GitHub Pages) or SVG (jsDelivr CDN)
+        if file_ext == ".html":
+            cdn_link = f"https://{GH_USER}.github.io/{repo_name}/batch/mass_drop_{repo_idx}/{filename}"
+        else:
+            cdn_link = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/batch/mass_drop_{repo_idx}/{filename}"
+            
         chunk_links.append(cdn_link)
         all_links.append(cdn_link)
         
@@ -200,9 +218,9 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)
         
-    # Immediately wipe local chunk files to free up runner disk space & inodes
+    # Immediately wipe local chunk files to free up runner disk space
     shutil.rmtree(repo_batch_dir, ignore_errors=True)
-    print(f"Cleaned up local files for {repo_name} to free disk space.")
+    print(f"Cleaned up local files for {repo_name}.")
         
     created_repos.append(repo_name)
     remaining_links -= chunk_size
@@ -216,7 +234,7 @@ with open(LINKS_FILE, "w", encoding="utf-8") as f:
 metadata = {
     "repo_name": created_repos[0] if created_repos else "unknown",
     "repos_created": created_repos,
-    "template_path": chosen_svg["path"],
+    "template_path": chosen_asset["path"],
     "total_links": len(all_links),
     "first_link": all_links[0] if all_links else ""
 }
@@ -225,7 +243,7 @@ with open(META_JSON, "w", encoding="utf-8") as f_meta:
 
 # Save current state so the next run knows which template was just used
 os.makedirs(os.path.dirname(STATE_JSON), exist_ok=True)
-state_content = {"last_template": chosen_svg["path"]}
+state_content = {"last_template": chosen_asset["path"]}
 with open(STATE_JSON, "w", encoding="utf-8") as f_state:
     json.dump(state_content, f_state, indent=2)
 
@@ -235,7 +253,7 @@ subprocess.run(["git", "init"], check=False)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
 subprocess.run(["git", "add", "batch/state.json"], check=True)
-subprocess.run(["git", "commit", "-m", f"Update state: last template {chosen_svg['path']}"], check=False)
+subprocess.run(["git", "commit", "-m", f"Update state: last template {chosen_asset['path']}"], check=False)
 control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
 subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)
 

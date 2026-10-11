@@ -20,7 +20,7 @@ UPSTREAM_BRANCH = "main"
 # FOLDER CONFIGURATION & LIMITS
 # ==========================================
 UPSTREAM_FOLDER = ""  # Root directory of the upstream repo
-MAX_PER_REPO = 16000  # Max files per individual GitHub repository (dynamically adjusted if file is large)
+MAX_PER_REPO = 16000  # Max files per individual GitHub repository
 # ==========================================
 
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
@@ -139,6 +139,12 @@ print(f"Chosen template for this run: {chosen_asset['path']}")
 # Determine file extension (.svg or .html)
 file_ext = os.path.splitext(chosen_asset["path"])[1].lower()
 
+# HTML Override Rule: If template is HTML, default/override TOTAL_LINKS to 6,000 maximum
+if file_ext == ".html":
+    if TOTAL_LINKS > 6000:
+        print(f"Notice: HTML template selected. Overriding requested links ({TOTAL_LINKS:,}) down to the safe default of 6,000.")
+    TOTAL_LINKS = 6000
+
 # Properly encode spaces and special characters for the URL download
 encoded_asset_path = urllib.parse.quote(chosen_asset["path"])
 raw_download_url = f"{RAW_UPSTREAM_BASE}/{encoded_asset_path}"
@@ -151,16 +157,7 @@ except Exception as e:
     print(f"Failed to download template asset: {e}")
     sys.exit(1)
 
-# Safety check: Prevent disk full error (Errno 28) for large HTML templates
-file_size_bytes = len(asset_content)
-max_safe_bytes_per_repo = 8 * 1024 * 1024 * 1024  # Limit to ~8GB per repo max to fit runner disk
-if file_size_bytes > 0:
-    calculated_max = math.floor(max_safe_bytes_per_repo / file_size_bytes)
-    if calculated_max < MAX_PER_REPO:
-        MAX_PER_REPO = max(100, calculated_max)
-        print(f"Notice: Template file is large ({file_size_bytes / 1024:.1f} KB). Automatically adjusting max files per repo to {MAX_PER_REPO:,} to prevent disk overflow.")
-
-# 3. Multi-Repo Chunking Loop with Disk Cleanup & Smart Hosting Selection
+# 3. Multi-Repo Chunking Loop (Writing files & workflow directly to root)
 num_repos = math.ceil(TOTAL_LINKS / MAX_PER_REPO)
 print(f"Total links requested: {TOTAL_LINKS:,} ({file_ext}). Splitting across {num_repos} repository/repositories.")
 
@@ -193,8 +190,8 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Failed to create repo {repo_name}: {e.code} - {e.read().decode()}")
         sys.exit(1)
         
-    # Generate files for this repo chunk
-    repo_batch_dir = os.path.join(REPO_ROOT, "batch", f"mass_drop_{repo_idx}")
+    # Generate files in a staging directory
+    repo_batch_dir = os.path.join(REPO_ROOT, "batch", f"root_drop_{repo_idx}")
     os.makedirs(repo_batch_dir, exist_ok=True)
     
     chunk_links = []
@@ -207,16 +204,59 @@ for repo_idx in range(1, num_repos + 1):
         with open(local_file_path, "wb") as f_out:
             f_out.write(asset_content)
             
-        # Build the correct link based on whether it's HTML (GitHub Pages) or SVG (jsDelivr CDN)
+        # Build clean root-level hosting links
         if file_ext == ".html":
-            cdn_link = f"https://{GH_USER}.github.io/{repo_name}/batch/mass_drop_{repo_idx}/{filename}"
+            cdn_link = f"https://{GH_USER}.github.io/{repo_name}/{filename}"
         else:
-            cdn_link = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/batch/mass_drop_{repo_idx}/{filename}"
+            cdn_link = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/{filename}"
             
         chunk_links.append(cdn_link)
         all_links.append(cdn_link)
         
-    # Git commit and push chunk
+    # If HTML, generate standard GitHub Pages deployment workflow YAML
+    if file_ext == ".html":
+        workflows_dir = os.path.join(REPO_ROOT, ".github", "workflows")
+        os.makedirs(workflows_dir, exist_ok=True)
+        workflow_file_path = os.path.join(workflows_dir, "pages.yml")
+        workflow_yaml = """name: Deploy static content to Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+"""
+        with open(workflow_file_path, "w", encoding="utf-8") as wf:
+            wf.write(workflow_yaml)
+
+    # Git commit and push chunk from the root
     os.chdir(REPO_ROOT)
     subprocess.run(["rm", "-rf", ".git"], check=False)
     subprocess.run(["git", "init"], check=True)
@@ -225,8 +265,13 @@ for repo_idx in range(1, num_repos + 1):
     subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
     subprocess.run(["git", "config", "http.postBuffer", "524288000"], check=True)
     
-    subprocess.run(["git", "add", f"batch/mass_drop_{repo_idx}/"], check=True)
-    subprocess.run(["git", "commit", "-m", f"Mass drop chunk {repo_idx} ({chunk_size} files)"], check=True)
+    # Move/copy files from staging into REPO_ROOT temporarily for git commit
+    for f_name in os.listdir(repo_batch_dir):
+        shutil.move(os.path.join(repo_batch_dir, f_name), os.path.join(REPO_ROOT, f_name))
+    
+    # Stage all root-level files and workflows
+    subprocess.run(["git", "add", "."], check=True)
+    subprocess.run(["git", "commit", "-m", f"Mass drop root chunk {repo_idx} ({chunk_size} files)"], check=True)
     
     remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{repo_name}.git"
     subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
@@ -236,19 +281,28 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)
         
-    # NOW that the main branch exists, enable GitHub Pages workflow source successfully!
+    # Enable GitHub Pages with workflow build type now that the workflow and branch exist
     if file_ext == ".html":
         pages_url = f"https://api.github.com/repos/{GH_USER}/{repo_name}/pages"
         pages_payload = json.dumps({"build_type": "workflow", "source": {"branch": "main", "path": "/"}}).encode("utf-8")
         pages_req = urllib.request.Request(pages_url, data=pages_payload, headers=headers, method="POST")
         try:
             urllib.request.urlopen(pages_req)
-            print(f"Enabled GitHub Pages workflow source for {repo_name}")
+            print(f"Enabled GitHub Pages workflow build type for {repo_name}")
         except urllib.error.HTTPError as e:
             print(f"Note: Could not auto-enable Pages: {e.read().decode()}")
 
-    # Immediately wipe local chunk files to free up runner disk space
+    # Clean up local staging files from REPO_ROOT
+    for f_name in os.listdir(REPO_ROOT):
+        if f_name.endswith(file_ext) and len(f_name) == 16 + len(file_ext):
+            try:
+                os.remove(os.path.join(REPO_ROOT, f_name))
+            except:
+                pass
     shutil.rmtree(repo_batch_dir, ignore_errors=True)
+    if os.path.isdir(os.path.join(REPO_ROOT, ".github")):
+        shutil.rmtree(os.path.join(REPO_ROOT, ".github"), ignore_errors=True)
+        
     print(f"Cleaned up local files for {repo_name}.")
         
     created_repos.append(repo_name)

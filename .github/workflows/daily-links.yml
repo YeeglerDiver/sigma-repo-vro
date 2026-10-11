@@ -41,7 +41,7 @@ jobs:
           git config user.name "link-dropper"
           git config user.email "link-dropper@users.noreply.github.com"
           
-          # Add all generated batch files and links
+          # Add all generated batch files and links (no date command)
           git add batch/
           git commit -m "Mass generate 16k fresh CDN links"
           

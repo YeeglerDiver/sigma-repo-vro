@@ -9,7 +9,7 @@ UPSTREAM = "seattleschools/media"
 UPSTREAM_BRANCH = "main"
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
 MAX_LINKS = 24000
-BATCH_SIZE = 30  # Number of SVGs to download and add per run
+BATCH_SIZE = 30
 
 CHOSEN_FOLDER = "smokingonzaandcoke"
 
@@ -35,7 +35,6 @@ except Exception as e:
     sys.exit(1)
 
 prefix = f"batch/{CHOSEN_FOLDER}/"
-# Filter specifically for SVG files
 upstream_files = [
     p for p in tree
     if p["type"] == "blob" and p["path"].startswith(prefix) and p["path"].lower().endswith(".svg")
@@ -45,11 +44,14 @@ if not upstream_files:
     print(f"No SVG files found under {prefix} upstream.")
     sys.exit(1)
 
-# Load existing links to check what's already been added
+# Load existing links, clean out any accidental raw.githubusercontent links
 existing_links = []
 if os.path.isfile(LINKS_FILE):
     with open(LINKS_FILE, "r", encoding="utf-8") as f:
-        existing_links = [line.strip() for line in f if line.strip()]
+        existing_links = [
+            line.strip() for line in f 
+            if line.strip() and "raw.githubusercontent.com" not in line
+        ]
 
 if len(existing_links) >= MAX_LINKS:
     print(f"Reached max limit of {MAX_LINKS} links. Nothing to do.")
@@ -69,20 +71,18 @@ for item in upstream_files:
     filename = os.path.basename(file_path_in_tree)
     local_file_path = os.path.join(LOCAL_BATCH_DIR, filename)
     
-    # Construct official jsDelivr CDN link pointing to YOUR repository
+    # Strictly jsDelivr CDN format only
     my_cdn_link = f"https://cdn.jsdelivr.net/gh/YeeglerDiver/sigma-repo-vro@main/batch/{CHOSEN_FOLDER}/{filename}"
     
     if my_cdn_link in existing_links:
         continue
         
-    # Download the SVG file content from upstream
     raw_download_url = f"{RAW_UPSTREAM_BASE}/{file_path_in_tree}"
     try:
         req_file = urllib.request.Request(raw_download_url, headers={"User-Agent": BOT_NAME})
         with urllib.request.urlopen(req_file, timeout=30) as file_resp:
             file_content = file_resp.read()
             
-        # Save it locally into your repository
         with open(local_file_path, "wb") as f_out:
             f_out.write(file_content)
             
@@ -99,7 +99,6 @@ if not new_links:
     print("No new SVG files to download.")
     sys.exit(0)
 
-# Combine existing + new links up to MAX_LINKS
 updated_links = (existing_links + new_links)[:MAX_LINKS]
 
 with open(LINKS_FILE, "w", encoding="utf-8") as f:

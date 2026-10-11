@@ -20,7 +20,6 @@ UPSTREAM_FOLDER = "batch/"
 # ==========================================
 
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
-TOTAL_LINKS = 16000
 GH_USER = "YeeglerDiver"
 
 GH_PAT = os.environ.get("GH_PAT")
@@ -32,8 +31,23 @@ REPO_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirnam
 LOCAL_BATCH_DIR = os.path.join(REPO_ROOT, "batch", "mass_drop")
 LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 PREFIX_FILE = os.path.join(REPO_ROOT, "repo_prefix.txt")
+AMOUNT_FILE = os.path.join(REPO_ROOT, "amount.txt")
 META_JSON = os.path.join(REPO_ROOT, "batch", ".metadata.json")
 STATE_JSON = os.path.join(REPO_ROOT, "batch", "state.json")
+
+# Determine total links to generate (Default: 16000, or read from amount.txt)
+TOTAL_LINKS = 16000
+if os.path.isfile(AMOUNT_FILE):
+    try:
+        with open(AMOUNT_FILE, "r", encoding="utf-8") as f_amt:
+            amt_content = f_amt.read().strip()
+            # Extract digits only in case there's extra text
+            digits_only = "".join(filter(str.isdigit, amt_content))
+            if digits_only:
+                TOTAL_LINKS = int(digits_only)
+                print(f"Loaded custom link amount from amount.txt: {TOTAL_LINKS:,}")
+    except Exception as e:
+        print(f"Warning: Could not parse amount.txt, defaulting to {TOTAL_LINKS:,}: {e}")
 
 # 1. Load previous run state to avoid repeating the same directory
 last_dir = None
@@ -158,7 +172,7 @@ os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 new_links = []
 CDN_BASE = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{NEW_REPO_NAME}@main"
 
-print(f"Generating {TOTAL_LINKS} physical files using template: {chosen_svg['path']}...")
+print(f"Generating {TOTAL_LINKS:,} physical files using template: {chosen_svg['path']}...")
 for _ in range(TOTAL_LINKS):
     rand_hash = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
     filename = f"{rand_hash}.svg"
@@ -199,20 +213,20 @@ subprocess.run(["git", "commit", "-m", f"Update state: last dir {chosen_dir}"], 
 control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
 subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)
 
-print(f"Generated {len(new_links)} links. Pushing to new dynamic repository {NEW_REPO_NAME}...")
+print(f"Generated {len(new_links):,} links. Pushing to new dynamic repository {NEW_REPO_NAME}...")
 
-# 5. Switch git remote to the NEW dynamic repository and push the 16k files
+# 5. Switch git remote to the NEW dynamic repository and push the files
 subprocess.run(["rm", "-rf", ".git"], check=False)
 subprocess.run(["git", "init"], check=True)
 subprocess.run(["git", "branch", "-M", "main"], check=True)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
 
-# Increase Git HTTP postBuffer to handle large 16,000-file payloads without crashing
+# Increase Git HTTP postBuffer to handle large payloads smoothly
 subprocess.run(["git", "config", "http.postBuffer", "524288000"], check=True)
 
 subprocess.run(["git", "add", "batch/mass_drop/", "batch/links.txt", "batch/.metadata.json"], check=True)
-subprocess.run(["git", "commit", "-m", f"Mass generate 16k links from {chosen_svg['path']}"], check=True)
+subprocess.run(["git", "commit", "-m", f"Mass generate {len(new_links):,} links from {chosen_svg['path']}"], check=True)
 
 remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{NEW_REPO_NAME}.git"
 subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)

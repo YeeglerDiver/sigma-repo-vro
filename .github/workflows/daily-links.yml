@@ -1,8 +1,8 @@
-name: Mass CDN Link Drop
+name: Dynamic Unique Repo CDN Drop
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # Runs every 10 minutes
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -20,18 +20,34 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate 16k individual links and files
+      - name: Generate unique repo name, files, and links
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: python scripts/make_links.py
 
-      - name: Commit and push changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Mass generate 16k fresh CDN links $(date -u +%Y-%m-%d %H:%M)"
-          file_pattern: batch/
-          commit_user_name: "link-dropper"
-          commit_user_email: "link-dropper@users.noreply.github.com"
+      - name: Push to the newly created unique repository
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          # Read the dynamically generated repo name from the temp file
+          TARGET_REPO=$(cat batch/.target_repo)
+          echo "Pushing batch to dynamic repository: $TARGET_REPO"
+          
+          git config user.name "link-dropper"
+          git config user.email "link-dropper@users.noreply.github.com"
+          
+          # Initialize fresh git state for the new repo
+          rm -rf .git
+          git init
+          git checkout -b main
+          
+          # Add all generated batch files and links
+          git add batch/
+          git commit -m "Mass generate 16k fresh CDN links ($(date -u +%Y-%m-%d %H:%M))"
+          
+          # Push directly to the unique repository using your PAT
+          git remote add origin https://x-access-token:${GH_PAT}@github.com/YeeglerDiver/${TARGET_REPO}.git
+          git push -u origin main --force
 
       - name: Post file to Discord
         if: ${{ vars.POST_DISCORD == 'true' }}

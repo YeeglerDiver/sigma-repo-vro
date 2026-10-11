@@ -1,0 +1,24 @@
+name: Cleanup Empty Repositories
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Runs once every day at midnight UTC
+  workflow_dispatch:    # Allows you to click a button to run it manually anytime
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run empty repo cleanup
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python scripts/cleanup_empty_repos.py

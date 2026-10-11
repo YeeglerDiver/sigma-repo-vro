@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 
 BOT_NAME = "link-dropper"
-MAX_LINKS = 16000
+TOTAL_LINKS = 16000
 
 webhook = os.environ.get("WEBHOOK")
 if not webhook:
@@ -25,23 +25,17 @@ if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
-total_links = len(links)
-percentage = min(100.0, (total_links / MAX_LINKS) * 100)
-
-# Build a multipart/form-data request to upload the file directly to Discord
 boundary = "----DiscordWebhookBoundarySigmaRepoVro"
 data = []
 
-# 1. Text payload component
 payload = {
-    "content": f"🚀 **{BOT_NAME} — Daily CDN Drop**\n📊 Progress: **{total_links}** / **{MAX_LINKS}** links ({percentage:.1f}%)\n📁 Attached is the complete updated `links.txt` file:"
+    "content": f"🚀 **{BOT_NAME} — Full Mass CDN Drop Complete!**\n📊 Generated **{len(links)}** fresh individual links from a single template SVG.\n📁 Complete `links.txt` file attached below:"
 }
 data.append(f"--{boundary}\r\n".encode("utf-8"))
 data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")
 data.append(b"Content-Type: application/json\r\n\r\n")
 data.append(json.dumps(payload).encode("utf-8") + b"\r\n")
 
-# 2. File attachment component (`links.txt`)
 with open(links_file, "rb") as f:
     file_bytes = f.read()
 
@@ -51,7 +45,6 @@ data.append(b"Content-Type: text/plain; charset=utf-8\r\n\r\n")
 data.append(file_bytes + b"\r\n")
 
 data.append(f"--{boundary}--\r\n".encode("utf-8"))
-
 body = b"".join(data)
 
 headers = {

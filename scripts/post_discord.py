@@ -18,7 +18,7 @@ if not os.path.isfile(links_file):
     print(f"links.txt not found at {links_file}")
     sys.exit(1)
 
-with open(links_file) as f:
+with open(links_file, "r", encoding="utf-8") as f:
     links = [l for l in f.read().splitlines() if l.strip()]
 
 if not links:
@@ -28,26 +28,40 @@ if not links:
 total_links = len(links)
 percentage = min(100.0, (total_links / MAX_LINKS) * 100)
 
-# Grab the latest 25 links (safely fitting within Discord's 2000 character limit)
-recent_links = links[-25:]
-links_block = "\n".join(recent_links)
+# Build a multipart/form-data request to upload the file directly to Discord
+boundary = "----DiscordWebhookBoundarySigmaRepoVro"
+data = []
 
-content = f"🚀 **{BOT_NAME} — Daily CDN Drop**\n📊 Progress: **{total_links}** / **{MAX_LINKS}** links ({percentage:.1f}%)\n```text\n{links_block}\n```"
+# 1. Text payload component
+payload = {
+    "content": f"🚀 **{BOT_NAME} — Daily CDN Drop**\n📊 Progress: **{total_links}** / **{MAX_LINKS}** links ({percentage:.1f}%)\n📁 Attached is the complete updated `links.txt` file:"
+}
+data.append(f"--{boundary}\r\n".encode("utf-8"))
+data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")
+data.append(b"Content-Type: application/json\r\n\r\n")
+data.append(json.dumps(payload).encode("utf-8") + b"\r\n")
 
-# Safety truncate if it ever goes over 2000 chars
-if len(content) > 2000:
-    content = content[:1997] + "..."
+# 2. File attachment component (`links.txt`)
+with open(links_file, "rb") as f:
+    file_bytes = f.read()
 
-payload = json.dumps({"content": content}).encode()
+data.append(f"--{boundary}\r\n".encode("utf-8"))
+data.append(b"Content-Disposition: form-data; name=\"files[0]\"; filename=\"links.txt\"\r\n")
+data.append(b"Content-Type: text/plain; charset=utf-8\r\n\r\n")
+data.append(file_bytes + b"\r\n")
+
+data.append(f"--{boundary}--\r\n".encode("utf-8"))
+
+body = b"".join(data)
 
 headers = {
-    "Content-Type": "application/json",
+    "Content-Type": f"multipart/form-data; boundary={boundary}",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9"
 }
 
-req = urllib.request.Request(webhook, data=payload, headers=headers)
+req = urllib.request.Request(webhook, data=body, headers=headers)
 try:
     resp = urllib.request.urlopen(req, timeout=30)
     print(f"Discord responded with status {resp.status}")

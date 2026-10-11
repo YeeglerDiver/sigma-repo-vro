@@ -6,6 +6,7 @@ import string
 import sys
 import datetime
 import urllib.request
+import urllib.parse
 import subprocess
 import re
 import math
@@ -122,7 +123,10 @@ print(f"Chosen template for this run: {chosen_asset['path']}")
 # Determine file extension (.svg or .html)
 file_ext = os.path.splitext(chosen_asset["path"])[1].lower()
 
-raw_download_url = f"{RAW_UPSTREAM_BASE}/{chosen_asset['path']}"
+# Properly encode spaces and special characters for the URL download
+encoded_asset_path = urllib.parse.quote(chosen_asset["path"])
+raw_download_url = f"{RAW_UPSTREAM_BASE}/{encoded_asset_path}"
+
 try:
     req_file = urllib.request.Request(raw_download_url, headers={"User-Agent": BOT_NAME})
     with urllib.request.urlopen(req_file, timeout=30) as file_resp:

@@ -29,7 +29,7 @@ boundary = "----DiscordWebhookBoundarySigmaRepoVro"
 data = []
 
 payload = {
-    "content": f"🚀 **{BOT_NAME} — Full Mass CDN Drop Complete!**\n📊 Generated **{len(links)}** fresh individual links from a single template SVG.\n📁 Complete `links.txt` file attached below:"
+    "content": f"🚀 **{BOT_NAME} — Full Mass CDN Drop Complete!**\n📊 Generated **{len(links)}** fresh individual links in a brand-new dynamic repository.\n📁 Complete `links.txt` file attached below:"
 }
 data.append(f"--{boundary}\r\n".encode("utf-8"))
 data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")

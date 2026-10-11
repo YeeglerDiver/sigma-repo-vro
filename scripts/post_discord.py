@@ -56,7 +56,7 @@ current_time = datetime.datetime.now(datetime.timezone.utc).strftime("%B %d, %Y 
 boundary = "----DiscordWebhookBoundaryInteractiveDrop"
 data = []
 
-# Build the rich embed mimicking your requested layout
+# Build the rich embed matching your exact requested layout
 embed = {
     "title": f"✨ Batch Drop: {total_links:,} Links Generated!",
     "description": f"Successfully compiled and deployed dynamic batch assets into repository **`{repo_name}`**.",
@@ -98,14 +98,14 @@ embed = {
     }
 }
 
-# Interactive Action Buttons (with external link arrows)
+# Interactive Action Buttons with box-and-arrow redirect icons (Style 5 = Link Button)
 components = [
     {
         "type": 1,  # Action Row
         "components": [
             {
                 "type": 2,  # Button
-                "style": 5,  # Link Button (opens URL in browser)
+                "style": 5,  # Link style (adds the external redirect arrow ↗)
                 "label": "Open GitHub Repo",
                 "url": repo_url
             },
@@ -118,7 +118,7 @@ components = [
             {
                 "type": 2,
                 "style": 5,
-                "label": "View Raw Links",
+                "label": "View All Links (Raw)",
                 "url": raw_github_url
             }
         ]

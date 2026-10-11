@@ -157,7 +157,7 @@ except Exception as e:
     print(f"Failed to download template asset: {e}")
     sys.exit(1)
 
-# 3. Multi-Repo Chunking Loop (Writing files & workflow directly to root)
+# 3. Multi-Repo Chunking Loop (Writing files directly to root)
 num_repos = math.ceil(TOTAL_LINKS / MAX_PER_REPO)
 print(f"Total links requested: {TOTAL_LINKS:,} ({file_ext}). Splitting across {num_repos} repository/repositories.")
 
@@ -212,49 +212,6 @@ for repo_idx in range(1, num_repos + 1):
             
         chunk_links.append(cdn_link)
         all_links.append(cdn_link)
-        
-    # If HTML, generate standard GitHub Pages deployment workflow YAML
-    if file_ext == ".html":
-        workflows_dir = os.path.join(REPO_ROOT, ".github", "workflows")
-        os.makedirs(workflows_dir, exist_ok=True)
-        workflow_file_path = os.path.join(workflows_dir, "pages.yml")
-        workflow_yaml = """name: Deploy static content to Pages
-
-on:
-  push:
-    branches: ["main"]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
-jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: '.'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-"""
-        with open(workflow_file_path, "w", encoding="utf-8") as wf:
-            wf.write(workflow_yaml)
 
     # Git commit and push chunk from the root
     os.chdir(REPO_ROOT)
@@ -265,11 +222,11 @@ jobs:
     subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
     subprocess.run(["git", "config", "http.postBuffer", "524288000"], check=True)
     
-    # Move/copy files from staging into REPO_ROOT temporarily for git commit
+    # Move files from staging into REPO_ROOT temporarily for git commit
     for f_name in os.listdir(repo_batch_dir):
         shutil.move(os.path.join(repo_batch_dir, f_name), os.path.join(REPO_ROOT, f_name))
     
-    # Stage all root-level files and workflows
+    # Stage all root-level files
     subprocess.run(["git", "add", "."], check=True)
     subprocess.run(["git", "commit", "-m", f"Mass drop root chunk {repo_idx} ({chunk_size} files)"], check=True)
     
@@ -281,14 +238,14 @@ jobs:
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)
         
-    # Enable GitHub Pages with workflow build type now that the workflow and branch exist
+    # NOW that the main branch exists with root files, enable GitHub Pages branch source publishing!
     if file_ext == ".html":
         pages_url = f"https://api.github.com/repos/{GH_USER}/{repo_name}/pages"
-        pages_payload = json.dumps({"build_type": "workflow", "source": {"branch": "main", "path": "/"}}).encode("utf-8")
+        pages_payload = json.dumps({"source": {"branch": "main", "path": "/"}}).encode("utf-8")
         pages_req = urllib.request.Request(pages_url, data=pages_payload, headers=headers, method="POST")
         try:
             urllib.request.urlopen(pages_req)
-            print(f"Enabled GitHub Pages workflow build type for {repo_name}")
+            print(f"Enabled GitHub Pages branch source for {repo_name}")
         except urllib.error.HTTPError as e:
             print(f"Note: Could not auto-enable Pages: {e.read().decode()}")
 
@@ -300,9 +257,6 @@ jobs:
             except:
                 pass
     shutil.rmtree(repo_batch_dir, ignore_errors=True)
-    if os.path.isdir(os.path.join(REPO_ROOT, ".github")):
-        shutil.rmtree(os.path.join(REPO_ROOT, ".github"), ignore_errors=True)
-        
     print(f"Cleaned up local files for {repo_name}.")
         
     created_repos.append(repo_name)

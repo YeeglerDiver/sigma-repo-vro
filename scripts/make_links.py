@@ -159,11 +159,18 @@ subprocess.run(["git", "init"], check=True)
 subprocess.run(["git", "branch", "-M", "main"], check=True)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
-subprocess.run(["git", "add", "batch/"], check=True)
+
+# Only add the specific clean batch files for this run (prevents committing old stray junk)
+subprocess.run(["git", "add", "batch/mass_drop/", "batch/links.txt", "batch/.metadata.json"], check=True)
 subprocess.run(["git", "commit", "-m", f"Mass generate 16k links from {chosen_svg['path']}"], check=True)
 
 remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{NEW_REPO_NAME}.git"
 subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
-subprocess.run(["git", "push", "-u", "origin", "main", "--force"], check=True)
+
+# Push with error checking
+push_result = subprocess.run(["git", "push", "-u", "origin", "main", "--force"])
+if push_result.returncode != 0:
+    print("Error: Git push failed!")
+    sys.exit(1)
 
 print("Successfully pushed all files to the new unique repository!")

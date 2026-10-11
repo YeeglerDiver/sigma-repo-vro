@@ -69,10 +69,10 @@ for item in upstream_files:
     filename = os.path.basename(file_path_in_tree)
     local_file_path = os.path.join(LOCAL_BATCH_DIR, filename)
     
-    # Construct instant Raw link pointing to YOUR repository
-    my_raw_link = f"https://raw.githubusercontent.com/YeeglerDiver/sigma-repo-vro/main/batch/{CHOSEN_FOLDER}/{filename}"
+    # Construct official jsDelivr CDN link pointing to YOUR repository
+    my_cdn_link = f"https://cdn.jsdelivr.net/gh/YeeglerDiver/sigma-repo-vro@main/batch/{CHOSEN_FOLDER}/{filename}"
     
-    if my_raw_link in existing_links:
+    if my_cdn_link in existing_links:
         continue
         
     # Download the SVG file content from upstream
@@ -86,7 +86,7 @@ for item in upstream_files:
         with open(local_file_path, "wb") as f_out:
             f_out.write(file_content)
             
-        new_links.append(my_raw_link)
+        new_links.append(my_cdn_link)
         downloaded_count += 1
         print(f"Downloaded and saved: {filename}")
         
@@ -105,4 +105,4 @@ updated_links = (existing_links + new_links)[:MAX_LINKS]
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(updated_links) + "\n")
 
-print(f"Added {len(new_links)} new raw links. Total links: {len(updated_links)}/{MAX_LINKS}")
+print(f"Added {len(new_links)} new jsDelivr links. Total links: {len(updated_links)}/{MAX_LINKS}")

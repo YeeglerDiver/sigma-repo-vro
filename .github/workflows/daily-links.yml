@@ -29,23 +29,19 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          # Read the dynamically generated repo name from the temp file
           TARGET_REPO=$(cat batch/.target_repo)
           echo "Pushing batch to dynamic repository: $TARGET_REPO"
           
           git config user.name "link-dropper"
           git config user.email "link-dropper@users.noreply.github.com"
           
-          # Initialize fresh git state for the new repo
           rm -rf .git
           git init
           git checkout -b main
           
-          # Add all generated batch files and links
           git add batch/
           git commit -m "Mass generate 16k fresh CDN links ($(date -u +%Y-%m-%d %H:%M))"
           
-          # Push directly to the unique repository using your PAT
           git remote add origin https://x-access-token:${GH_PAT}@github.com/YeeglerDiver/${TARGET_REPO}.git
           git push -u origin main --force
 

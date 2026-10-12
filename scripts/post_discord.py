@@ -8,7 +8,6 @@ import urllib.request
 
 BOT_NAME = "link-dropper"
 GH_USER = "YeeglerDiver"
-CONTROL_REPO = "sigma-repo-vro"
 
 webhook = os.environ.get("WEBHOOK")
 if not webhook:
@@ -30,7 +29,7 @@ if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
-# Load metadata if available for repo name and first link
+# Load metadata for repo name and first link
 meta = {}
 if os.path.isfile(meta_file):
     try:
@@ -65,9 +64,9 @@ else:
 boundary = "----DiscordWebhookBoundarySigmaRepoVro"
 data = []
 
-# URLs for clickable inline links
+# URLs for clickable inline links pointing directly to the dynamic repo
 repo_url = f"https://github.com/{GH_USER}/{repo_name}"
-raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{CONTROL_REPO}/main/batch/links.txt"
+raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/links.txt"
 
 # Rich Embed Payload design with clickable markdown links in the description
 payload = {

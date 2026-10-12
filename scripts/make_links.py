@@ -288,21 +288,4 @@ metadata = {
 with open(META_JSON, "w", encoding="utf-8") as f_meta:
     json.dump(metadata, f_meta, indent=2)
 
-# Save current state
-os.makedirs(os.path.dirname(STATE_JSON), exist_ok=True)
-state_content = {"last_template": chosen_asset["path"]}
-with open(STATE_JSON, "w", encoding="utf-8") as f_state:
-    json.dump(state_content, f_state, indent=2)
-
-# Save state and metadata back to control repository
-os.chdir(REPO_ROOT)
-print("Saving state and metadata back to main control repository...")
-subprocess.run(["git", "init"], check=False)
-subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
-subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
-subprocess.run(["git", "add", "batch/state.json", "batch/.metadata.json"], check=True)
-subprocess.run(["git", "commit", "-m", f"Update state and batch metadata for drop ({len(all_links)} links)"], check=False)
-control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
-subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)
-
-print(f"\nSuccessfully generated {len(all_links):,} total links across {len(created_repos)} repositories!")
+print(f"Successfully generated metadata pointing to repo: {metadata['repo_name']}")

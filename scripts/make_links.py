@@ -18,7 +18,7 @@ UPSTREAM = "donoEla/daily-linkdrops"
 UPSTREAM_BRANCH = "main"
 
 UPSTREAM_FOLDER = ""
-MAX_PER_REPO = 16000  # Splits across repositories as designed
+MAX_PER_REPO = 16000
 
 RAW_UPSTREAM_BASE = f"https://raw.githubusercontent.com/{UPSTREAM}/{UPSTREAM_BRANCH}"
 GH_USER = "YeeglerDiver"
@@ -37,7 +37,7 @@ FILE_WORDS_FILE = os.path.join(REPO_ROOT, "file_words.txt")
 META_JSON = os.path.join(REPO_ROOT, "batch", ".metadata.json")
 STATE_JSON = os.path.join(REPO_ROOT, "batch", "state.json")
 
-TOTAL_LINKS = 32000
+TOTAL_LINKS = 16000
 if os.path.isfile(AMOUNT_FILE):
     try:
         with open(AMOUNT_FILE, "r", encoding="utf-8") as f_amt:
@@ -189,27 +189,24 @@ for repo_idx in range(1, num_repos + 1):
     repo_batch_dir = os.path.join(REPO_ROOT, "batch", f"root_drop_{repo_idx}")
     os.makedirs(repo_batch_dir, exist_ok=True)
 
-    # Initialize Git immediately in repo_batch_dir to stream files into Git without blowing up runner disk
     os.chdir(repo_batch_dir)
     subprocess.run(["git", "init"], check=True)
     subprocess.run(["git", "branch", "-M", "main"], check=True)
     subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
     subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
-    subprocess.run(["git", "config", "http.postBuffer", "524288000"], check=True)
+    subprocess.run(["git", "config", "http.postBuffer", "1048576000"], check=True)
+    subprocess.run(["git", "config", "core.compression", "0"], check=True)
 
     master_template_path = os.path.join(repo_batch_dir, f"_master_asset{file_ext}")
     with open(master_template_path, "wb") as f_master:
         f_master.write(asset_content)
     
     chunk_links = []
-    
-    # Process in sub-batches of 2,000 to keep disk space lean
     SUB_BATCH_SIZE = 2000
     files_created_in_chunk = 0
 
     while files_created_in_chunk < chunk_size:
         batch_limit = min(SUB_BATCH_SIZE, chunk_size - files_created_in_chunk)
-        current_sub_files = []
 
         for _ in range(batch_limit):
             if asset_word_pool and len(asset_word_pool) >= 2:
@@ -224,10 +221,7 @@ for repo_idx in range(1, num_repos + 1):
                 filename = f"{rand_hash}{file_ext}"
 
             local_file_path = os.path.join(repo_batch_dir, filename)
-            
-            # Hardlink uses no extra disk storage
             os.link(master_template_path, local_file_path)
-            current_sub_files.append(local_file_path)
 
             if file_ext == ".html":
                 file_endpoints = [
@@ -255,16 +249,13 @@ for repo_idx in range(1, num_repos + 1):
             chunk_links.extend(file_endpoints)
             all_links.extend(file_endpoints)
 
-        # Stage and record objects into git index immediately
         subprocess.run(["git", "add", "-A"], check=True)
         files_created_in_chunk += batch_limit
         print(f"Staged {files_created_in_chunk:,}/{chunk_size:,} files for {repo_name}...")
 
-    # Remove master template reference file
     if os.path.isfile(master_template_path):
         os.remove(master_template_path)
 
-    # If first repo, generate links.txt directly in the staging folder
     if repo_idx == 1:
         os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
         with open(LINKS_FILE, "w", encoding="utf-8") as f_links:
@@ -277,9 +268,17 @@ for repo_idx in range(1, num_repos + 1):
     remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{repo_name}.git"
     subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
     
-    push_result = subprocess.run("git push -u origin main --force", shell=True)
-    if push_result.returncode != 0:
-        print(f"Error: Git push failed for {repo_name}!")
+    print(f"Pushing {chunk_size:,} files to {repo_name}...")
+    try:
+        push_proc = subprocess.run(
+            ["git", "push", "-u", "origin", "main", "--force", "--progress"],
+            timeout=300
+        )
+        if push_proc.returncode != 0:
+            print(f"Error: Git push failed for {repo_name}!")
+            sys.exit(1)
+    except subprocess.TimeoutExpired:
+        print(f"Error: Git push timed out after 5 minutes on {repo_name}.")
         sys.exit(1)
         
     if file_ext == ".html":
@@ -291,7 +290,6 @@ for repo_idx in range(1, num_repos + 1):
         except urllib.error.HTTPError as e:
             print(f"Note: Could not auto-enable Pages: {e.read().decode()}")
 
-    # Wipe staging folder clean right after pushing chunk to free disk space before chunk 2
     os.chdir(REPO_ROOT)
     shutil.rmtree(repo_batch_dir, ignore_errors=True)
     print(f"Cleaned up local files for {repo_name} to free disk space.")
@@ -299,12 +297,10 @@ for repo_idx in range(1, num_repos + 1):
     created_repos.append(repo_name)
     remaining_links -= chunk_size
 
-# Write final compiled links to local batch/links.txt
 os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(all_links) + "\n")
 
-# Save run metadata
 metadata = {
     "repo_name": created_repos[0] if created_repos else "unknown",
     "repos_created": created_repos,
@@ -315,13 +311,11 @@ metadata = {
 with open(META_JSON, "w", encoding="utf-8") as f_meta:
     json.dump(metadata, f_meta, indent=2)
 
-# Save current state
 os.makedirs(os.path.dirname(STATE_JSON), exist_ok=True)
 state_content = {"last_template": chosen_asset["path"]}
 with open(STATE_JSON, "w", encoding="utf-8") as f_state:
     json.dump(state_content, f_state, indent=2)
 
-# Save state and metadata back to control repository
 os.chdir(REPO_ROOT)
 print("Saving state and metadata back to main control repository...")
 subprocess.run(["git", "init"], check=False)

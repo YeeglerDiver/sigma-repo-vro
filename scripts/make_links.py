@@ -216,22 +216,20 @@ for repo_idx in range(1, num_repos + 1):
         chunk_links.extend(file_endpoints)
         all_links.extend(file_endpoints)
 
-    os.chdir(REPO_ROOT)
-    subprocess.run(["rm", "-rf", ".git"], check=False)
+    # If first repo, generate links.txt directly in the staging folder
+    if repo_idx == 1:
+        os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
+        with open(LINKS_FILE, "w", encoding="utf-8") as f_links:
+            f_links.write("\n".join(chunk_links) + "\n")
+        shutil.copy(LINKS_FILE, os.path.join(repo_batch_dir, "links.txt"))
+
+    # Isolate git init and commit inside repo_batch_dir (prevents workflows folder from being added)
+    os.chdir(repo_batch_dir)
     subprocess.run(["git", "init"], check=True)
     subprocess.run(["git", "branch", "-M", "main"], check=True)
     subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
     subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
     subprocess.run(["git", "config", "http.postBuffer", "524288000"], check=True)
-    
-    for f_name in os.listdir(repo_batch_dir):
-        shutil.move(os.path.join(repo_batch_dir, f_name), os.path.join(REPO_ROOT, f_name))
-    
-    if repo_idx == 1:
-        os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
-        with open(LINKS_FILE, "w", encoding="utf-8") as f_links:
-            f_links.write("\n".join(chunk_links) + "\n")
-        shutil.copy(LINKS_FILE, os.path.join(REPO_ROOT, "links.txt"))
 
     subprocess.run(["git", "add", "-A"], check=True)
     subprocess.run(["git", "commit", "-m", f"Mass drop root chunk {repo_idx} ({chunk_size} files)"], check=True)
@@ -253,22 +251,19 @@ for repo_idx in range(1, num_repos + 1):
         except urllib.error.HTTPError as e:
             print(f"Note: Could not auto-enable Pages: {e.read().decode()}")
 
-    for f_name in os.listdir(REPO_ROOT):
-        if f_name.endswith(file_ext) or f_name == "links.txt":
-            try:
-                os.remove(os.path.join(REPO_ROOT, f_name))
-            except:
-                pass
+    # Clean up local chunk folder
     shutil.rmtree(repo_batch_dir, ignore_errors=True)
     print(f"Cleaned up local files for {repo_name}.")
         
     created_repos.append(repo_name)
     remaining_links -= chunk_size
 
+# Write final compiled links to local batch/links.txt
 os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(all_links) + "\n")
 
+# Save run metadata
 metadata = {
     "repo_name": created_repos[0] if created_repos else "unknown",
     "repos_created": created_repos,
@@ -279,12 +274,15 @@ metadata = {
 with open(META_JSON, "w", encoding="utf-8") as f_meta:
     json.dump(metadata, f_meta, indent=2)
 
+# Save current state
 os.makedirs(os.path.dirname(STATE_JSON), exist_ok=True)
 state_content = {"last_template": chosen_asset["path"]}
 with open(STATE_JSON, "w", encoding="utf-8") as f_state:
     json.dump(state_content, f_state, indent=2)
 
+# Save state and metadata back to control repository
 os.chdir(REPO_ROOT)
+print("Saving state and metadata back to main control repository...")
 subprocess.run(["git", "init"], check=False)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)

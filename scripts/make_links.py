@@ -91,7 +91,7 @@ if os.path.isfile(PREFIX_FILE):
             chosen_words = random.sample(words, num_to_pick)
             custom_prefix = "-".join(chosen_words)
 
-# Determine time slot (morning, midday, afternoon) based on current UTC hour
+# Determine time slot based on current UTC hour
 now_utc = datetime.datetime.now(datetime.timezone.utc)
 hour = now_utc.hour
 if hour < 11:
@@ -238,7 +238,7 @@ for repo_idx in range(1, num_repos + 1):
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)
         
-    # NOW that the main branch exists with root files, enable GitHub Pages branch source publishing!
+    # Enable GitHub Pages branch source publishing
     if file_ext == ".html":
         pages_url = f"https://api.github.com/repos/{GH_USER}/{repo_name}/pages"
         pages_payload = json.dumps({"source": {"branch": "main", "path": "/"}}).encode("utf-8")
@@ -267,7 +267,7 @@ os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(all_links) + "\n")
 
-# Save run metadata for Discord notification
+# Save run metadata for Discord notification & buttons
 metadata = {
     "repo_name": created_repos[0] if created_repos else "unknown",
     "repos_created": created_repos,
@@ -284,13 +284,14 @@ state_content = {"last_template": chosen_asset["path"]}
 with open(STATE_JSON, "w", encoding="utf-8") as f_state:
     json.dump(state_content, f_state, indent=2)
 
+# Save state, metadata, and links back to the main control repository
 os.chdir(REPO_ROOT)
-print("Saving state back to main control repository...")
+print("Saving state, metadata, and links back to main control repository...")
 subprocess.run(["git", "init"], check=False)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
-subprocess.run(["git", "add", "batch/state.json"], check=True)
-subprocess.run(["git", "commit", "-m", f"Update state: last template {chosen_asset['path']}"], check=False)
+subprocess.run(["git", "add", "batch/state.json", "batch/.metadata.json", "batch/links.txt"], check=True)
+subprocess.run(["git", "commit", "-m", f"Update state and batch metadata for drop ({len(all_links)} links)"], check=False)
 control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
 subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)
 

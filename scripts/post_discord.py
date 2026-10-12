@@ -65,17 +65,23 @@ else:
 boundary = "----DiscordWebhookBoundarySigmaRepoVro"
 data = []
 
-# URLs for Discord buttons
+# URLs for clickable inline links
 repo_url = f"https://github.com/{GH_USER}/{repo_name}"
 raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{CONTROL_REPO}/main/batch/links.txt"
 
-# Rich Embed Payload design with Discord Buttons (Components) & Dynamic Local Time
+# Rich Embed Payload design with clickable markdown links in the description
 payload = {
     "content": "@here",  # Triggers notification ping
     "embeds": [
         {
             "title": "🚀 Mass Asset Drop Deployment Complete",
-            "description": "A fresh batch of individual links has been successfully generated, distributed across dynamic repositories, and deployed.",
+            "description": (
+                "A fresh batch of individual links has been successfully generated, distributed across dynamic repositories, and deployed.\n\n"
+                "🔗 **Quick Access Links:**\n"
+                f"• [Test First Link]({first_link})\n"
+                f"• [View GitHub Repo]({repo_url})\n"
+                f"• [Raw links.txt]({raw_links_url})"
+            ),
             "color": 5793266,  # Vibrant Cyan/Blue Accent
             "fields": [
                 {
@@ -108,31 +114,6 @@ payload = {
                 "text": f"{BOT_NAME} • Automated Multi-Repo System"
             },
             "timestamp": now_utc.isoformat()
-        }
-    ],
-    "components": [
-        {
-            "type": 1,  # Action Row
-            "components": [
-                {
-                    "type": 2,  # Button
-                    "style": 5,  # Link button style
-                    "label": "Test First Link",
-                    "url": first_link
-                },
-                {
-                    "type": 2,
-                    "style": 5,
-                    "label": "View GitHub Repo",
-                    "url": repo_url
-                },
-                {
-                    "type": 2,
-                    "style": 5,
-                    "label": "Raw links.txt",
-                    "url": raw_links_url
-                }
-            ]
         }
     ]
 }

@@ -2,11 +2,8 @@ name: Dynamic Unique Repo CDN Drop
 
 on:
   schedule:
-    # Runs 3 times a day:
-    # 1. Morning (8:00 AM UTC)
-    # 2. Midday (1:00 PM UTC)
-    # 3. Afternoon (6:00 PM UTC)
-    - cron: "0 8,13,18 * * *"
+    # Runs every 3 hours (8 times a day)
+    - cron: "0 */3 * * *"
   workflow_dispatch:
 
 permissions:

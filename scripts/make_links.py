@@ -11,6 +11,7 @@ import subprocess
 import re
 import math
 import shutil
+import time
 
 BOT_NAME = "link-dropper"
 UPSTREAM = "donoEla/daily-linkdrops"
@@ -161,12 +162,29 @@ for repo_idx in range(1, num_repos + 1):
         "Content-Type": "application/json"
     }
     
-    req = urllib.request.Request(api_url, data=payload, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req) as resp:
-            print(f"Successfully created repository: {repo_name}")
-    except urllib.error.HTTPError as e:
-        print(f"Failed to create repo {repo_name}: {e.code} - {e.read().decode()}")
+    # Retry loop with backoff for secondary rate limits
+    max_retries = 5
+    repo_created = False
+
+    for attempt in range(1, max_retries + 1):
+        req = urllib.request.Request(api_url, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                print(f"Successfully created repository: {repo_name}")
+                repo_created = True
+                break
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode()
+            if e.code == 403 and "secondary rate limit" in err_body.lower():
+                wait_seconds = 60 * attempt
+                print(f"Hit GitHub secondary rate limit. Backing off for {wait_seconds}s before retry ({attempt}/{max_retries})...")
+                time.sleep(wait_seconds)
+            else:
+                print(f"Failed to create repo {repo_name}: {e.code} - {err_body}")
+                sys.exit(1)
+
+    if not repo_created:
+        print(f"Error: Could not create {repo_name} after {max_retries} attempts.")
         sys.exit(1)
         
     repo_batch_dir = os.path.join(REPO_ROOT, "batch", f"root_drop_{repo_idx}")
@@ -223,7 +241,7 @@ for repo_idx in range(1, num_repos + 1):
             f_links.write("\n".join(chunk_links) + "\n")
         shutil.copy(LINKS_FILE, os.path.join(repo_batch_dir, "links.txt"))
 
-    # Isolate git init and commit inside repo_batch_dir (prevents workflows folder from being added)
+    # Isolate git operations inside repo_batch_dir to avoid touching .github/ workflows
     os.chdir(repo_batch_dir)
     subprocess.run(["git", "init"], check=True)
     subprocess.run(["git", "branch", "-M", "main"], check=True)
@@ -251,7 +269,7 @@ for repo_idx in range(1, num_repos + 1):
         except urllib.error.HTTPError as e:
             print(f"Note: Could not auto-enable Pages: {e.read().decode()}")
 
-    # Clean up local chunk folder
+    # Clean up local staging directory
     shutil.rmtree(repo_batch_dir, ignore_errors=True)
     print(f"Cleaned up local files for {repo_name}.")
         

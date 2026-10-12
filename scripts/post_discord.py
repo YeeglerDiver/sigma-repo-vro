@@ -62,6 +62,10 @@ else:
 repo_url = f"https://github.com/{GH_USER}/{repo_name}".strip()
 raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/links.txt".strip()
 
+print(f"Test First Link URL: {first_link}")
+print(f"GitHub Repo URL: {repo_url}")
+print(f"Raw links.txt URL: {raw_links_url}")
+
 payload = {
     "content": "@here",
     "embeds": [

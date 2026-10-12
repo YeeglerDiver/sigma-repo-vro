@@ -29,6 +29,7 @@ if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
+# Load metadata robustly
 meta = {}
 if os.path.isfile(meta_file):
     try:
@@ -38,13 +39,19 @@ if os.path.isfile(meta_file):
     except Exception as e:
         print(f"Warning: Could not parse .metadata.json: {e}")
 
-first_link = (meta.get("first_link") or links[0]).strip()
-repo_name = (meta.get("repo_name") or f"{GH_USER}-drop").strip()
+first_link = meta.get("first_link") or links[0]
+repo_name = meta.get("repo_name") or f"{GH_USER}-drop"
 
+# Ensure URLs are clean and stripped of any accidental whitespace/newlines
+first_link = first_link.strip()
+repo_name = repo_name.strip()
+
+# Detect if the drop was HTML (GitHub Pages) or SVG (jsDelivr CDN)
 is_html = ".github.io" in first_link
 asset_type = "HTML (Live GitHub Pages)" if is_html else "SVG (jsDelivr CDN)"
 hosting_badge = "🌐 Live Interactive Site" if is_html else "⚡ Fast CDN Delivery"
 
+# Get current time and Unix timestamp for Discord's dynamic local formatting
 now_utc = datetime.datetime.now(datetime.timezone.utc)
 unix_time = int(now_utc.timestamp())
 
@@ -59,6 +66,10 @@ else:
         run_slot = 8
     trigger_desc = f"⏰ **Scheduled Run** (Daily Run #{run_slot} of 8)"
 
+boundary = "----DiscordWebhookBoundarySigmaRepoVro"
+data = []
+
+# URLs for clean clickable inline links
 repo_url = f"https://github.com/{GH_USER}/{repo_name}".strip()
 raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/links.txt".strip()
 
@@ -66,8 +77,9 @@ print(f"Test First Link URL: {first_link}")
 print(f"GitHub Repo URL: {repo_url}")
 print(f"Raw links.txt URL: {raw_links_url}")
 
+# Rich Embed Payload design with clean markdown inline links and all fields intact
 payload = {
-    "content": "@here",
+    "content": "@here",  # Triggers notification ping
     "embeds": [
         {
             "title": "🚀 Mass Asset Drop Deployment Complete",
@@ -78,7 +90,7 @@ payload = {
                 f"• **[View GitHub Repo]({repo_url})**\n"
                 f"• **[Raw links.txt]({raw_links_url})**"
             ),
-            "color": 5793266,
+            "color": 5793266,  # Vibrant Cyan/Blue Accent
             "fields": [
                 {
                     "name": "⚙️ Execution Type",
@@ -114,10 +126,26 @@ payload = {
     ]
 }
 
-body = json.dumps(payload).encode("utf-8")
+# Construct multipart/form-data payload for Discord webhook with file attachment
+data.append(f"--{boundary}\r\n".encode("utf-8"))
+data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")
+data.append(b"Content-Type: application/json\r\n\r\n")
+data.append(json.dumps(payload).encode("utf-8") + b"\r\n")
+
+with open(links_file, "rb") as f:
+    file_bytes = f.read()
+
+data.append(f"--{boundary}\r\n".encode("utf-8"))
+data.append(b"Content-Disposition: form-data; name=\"files[0]\"; filename=\"links.txt\"\r\n")
+data.append(b"Content-Type: text/plain; charset=utf-8\r\n\r\n")
+data.append(file_bytes + b"\r\n")
+
+data.append(f"--{boundary}--\r\n".encode("utf-8"))
+body = b"".join(data)
+
 headers = {
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0",
+    "Content-Type": f"multipart/form-data; boundary={boundary}",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Accept": "application/json"
 }
 

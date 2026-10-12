@@ -220,12 +220,41 @@ for repo_idx in range(1, num_repos + 1):
             
         # Build clean root-level hosting links
         if file_ext == ".html":
-            cdn_link = f"https://{GH_USER}.github.io/{repo_name}/{filename}"
+            file_endpoints = [
+                f"https://{GH_USER}.github.io/{repo_name}/{filename}"
+            ]
         else:
-            cdn_link = f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/{filename}"
+            file_endpoints = [
+                # jsDelivr & variations
+                f"https://cdn.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/{filename}",
+                f"https://fastly.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/{filename}",
+                f"https://gcore.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/{filename}",
+                f"https://testingcf.jsdelivr.net/gh/{GH_USER}/{repo_name}@main/{filename}",
+
+                # Statically
+                f"https://cdn.staticaly.com/gh/{GH_USER}/{repo_name}/main/{filename}",
+
+                # GitHack (Dev & Production)
+                f"https://raw.githack.com/{GH_USER}/{repo_name}/main/{filename}",
+                f"https://rawcdn.githack.com/{GH_USER}/{repo_name}/main/{filename}",
+
+                # GitHub Raw & Variants
+                f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/{filename}",
+
+                # ESM
+                f"https://esm.sh/gh/{GH_USER}/{repo_name}@main/{filename}",
+                f"https://raw.esm.sh/gh/{GH_USER}/{repo_name}@main/{filename}",
+
+                # Proxies & Mirrors
+                f"https://ghproxy.net/https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/{filename}",
+                f"https://mirror.ghproxy.com/https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/{filename}",
+                f"https://raw.kkgithub.com/{GH_USER}/{repo_name}/main/{filename}",
+                f"https://raw.staticdn.net/{GH_USER}/{repo_name}/main/{filename}",
+                f"https://raw.gitmirror.com/{GH_USER}/{repo_name}/main/{filename}"
+            ]
             
-        chunk_links.append(cdn_link)
-        all_links.append(cdn_link)
+        chunk_links.extend(file_endpoints)
+        all_links.extend(file_endpoints)
 
     # Git commit and push chunk from the root
     os.chdir(REPO_ROOT)

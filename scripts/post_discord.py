@@ -29,7 +29,6 @@ if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
-# Load metadata robustly
 meta = {}
 if os.path.isfile(meta_file):
     try:
@@ -42,12 +41,10 @@ if os.path.isfile(meta_file):
 first_link = (meta.get("first_link") or links[0]).strip()
 repo_name = (meta.get("repo_name") or f"{GH_USER}-drop").strip()
 
-# Detect asset type
 is_html = ".github.io" in first_link
 asset_type = "HTML (Live GitHub Pages)" if is_html else "SVG (jsDelivr CDN)"
 hosting_badge = "🌐 Live Interactive Site" if is_html else "⚡ Fast CDN Delivery"
 
-# Timestamps
 now_utc = datetime.datetime.now(datetime.timezone.utc)
 unix_time = int(now_utc.timestamp())
 
@@ -62,15 +59,9 @@ else:
         run_slot = 8
     trigger_desc = f"⏰ **Scheduled Run** (Daily Run #{run_slot} of 8)"
 
-# URLs for clean clickable inline links
 repo_url = f"https://github.com/{GH_USER}/{repo_name}".strip()
 raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/links.txt".strip()
 
-print(f"Test First Link URL: {first_link}")
-print(f"GitHub Repo URL: {repo_url}")
-print(f"Raw links.txt URL: {raw_links_url}")
-
-# Discord Embed Payload with direct links instead of heavy multipart attachments
 payload = {
     "content": "@here",
     "embeds": [
@@ -119,7 +110,6 @@ payload = {
     ]
 }
 
-# Post standard JSON payload without file upload overhead
 body = json.dumps(payload).encode("utf-8")
 headers = {
     "Content-Type": "application/json",

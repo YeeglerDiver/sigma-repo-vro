@@ -5,6 +5,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+import zipfile
 
 BOT_NAME = "link-dropper"
 GH_USER = "YeeglerDiver"
@@ -42,16 +43,13 @@ if os.path.isfile(meta_file):
 first_link = meta.get("first_link") or links[0]
 repo_name = meta.get("repo_name") or f"{GH_USER}-drop"
 
-# Ensure URLs are clean and stripped of any accidental whitespace/newlines
 first_link = first_link.strip()
 repo_name = repo_name.strip()
 
-# Detect if the drop was HTML (GitHub Pages) or SVG (jsDelivr CDN)
 is_html = ".github.io" in first_link
 asset_type = "HTML (Live GitHub Pages)" if is_html else "SVG (jsDelivr CDN)"
 hosting_badge = "🌐 Live Interactive Site" if is_html else "⚡ Fast CDN Delivery"
 
-# Get current time and Unix timestamp for Discord's dynamic local formatting
 now_utc = datetime.datetime.now(datetime.timezone.utc)
 unix_time = int(now_utc.timestamp())
 
@@ -66,10 +64,6 @@ else:
         run_slot = 8
     trigger_desc = f"⏰ **Scheduled Run** (Daily Run #{run_slot} of 8)"
 
-boundary = "----DiscordWebhookBoundarySigmaRepoVro"
-data = []
-
-# URLs for clean clickable inline links
 repo_url = f"https://github.com/{GH_USER}/{repo_name}".strip()
 raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/links.txt".strip()
 
@@ -77,9 +71,8 @@ print(f"Test First Link URL: {first_link}")
 print(f"GitHub Repo URL: {repo_url}")
 print(f"Raw links.txt URL: {raw_links_url}")
 
-# Rich Embed Payload design with clean markdown inline links and all fields intact
 payload = {
-    "content": "@here",  # Triggers notification ping
+    "content": "@here",
     "embeds": [
         {
             "title": "🚀 Mass Asset Drop Deployment Complete",
@@ -90,7 +83,7 @@ payload = {
                 f"• **[View GitHub Repo]({repo_url})**\n"
                 f"• **[Raw links.txt]({raw_links_url})**"
             ),
-            "color": 5793266,  # Vibrant Cyan/Blue Accent
+            "color": 5793266,
             "fields": [
                 {
                     "name": "⚙️ Execution Type",
@@ -126,28 +119,48 @@ payload = {
     ]
 }
 
-# Construct multipart/form-data payload for Discord webhook with file attachment
-data.append(f"--{boundary}\r\n".encode("utf-8"))
-data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")
-data.append(b"Content-Type: application/json\r\n\r\n")
-data.append(json.dumps(payload).encode("utf-8") + b"\r\n")
+# --- Handle File Attachment & Discord 25MB Limit ---
+zip_path = os.path.join(REPO_ROOT, "batch", "links.zip")
+with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
+    zipf.write(links_file, arcname="links.txt")
 
-with open(links_file, "rb") as f:
-    file_bytes = f.read()
+zip_size_bytes = os.path.getsize(zip_path)
+MAX_DISCORD_BYTES = 24 * 1024 * 1024  # Keep safety threshold at 24 MB
 
-data.append(f"--{boundary}\r\n".encode("utf-8"))
-data.append(b"Content-Disposition: form-data; name=\"files[0]\"; filename=\"links.txt\"\r\n")
-data.append(b"Content-Type: text/plain; charset=utf-8\r\n\r\n")
-data.append(file_bytes + b"\r\n")
+# Check if zip file fits within Discord limits
+if zip_size_bytes <= MAX_DISCORD_BYTES:
+    print(f"Attaching compressed links.zip ({zip_size_bytes / (1024 * 1024):.2f} MB)...")
+    boundary = "----DiscordWebhookBoundarySigmaRepoVro"
+    data = []
 
-data.append(f"--{boundary}--\r\n".encode("utf-8"))
-body = b"".join(data)
+    data.append(f"--{boundary}\r\n".encode("utf-8"))
+    data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")
+    data.append(b"Content-Type: application/json\r\n\r\n")
+    data.append(json.dumps(payload).encode("utf-8") + b"\r\n")
 
-headers = {
-    "Content-Type": f"multipart/form-data; boundary={boundary}",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "application/json"
-}
+    with open(zip_path, "rb") as f_zip:
+        file_bytes = f_zip.read()
+
+    data.append(f"--{boundary}\r\n".encode("utf-8"))
+    data.append(b"Content-Disposition: form-data; name=\"files[0]\"; filename=\"links.zip\"\r\n")
+    data.append(b"Content-Type: application/zip\r\n\r\n")
+    data.append(file_bytes + b"\r\n")
+    data.append(f"--{boundary}--\r\n".encode("utf-8"))
+
+    body = b"".join(data)
+    headers = {
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+    }
+else:
+    print(f"Notice: links.zip is {zip_size_bytes / (1024 * 1024):.2f} MB (exceeds limit). Sending embed without file attachment...")
+    body = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+    }
 
 req = urllib.request.Request(webhook, data=body, headers=headers)
 try:

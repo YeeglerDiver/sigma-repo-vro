@@ -3,9 +3,9 @@ import datetime
 import json
 import os
 import sys
-import time
 import urllib.error
 import urllib.request
+import zipfile
 
 BOT_NAME = "link-dropper"
 GH_USER = "YeeglerDiver"
@@ -18,6 +18,7 @@ if not webhook:
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 links_file = os.path.join(REPO_ROOT, "batch", "links.txt")
 meta_file = os.path.join(REPO_ROOT, "batch", ".metadata.json")
+zip_file = os.path.join(REPO_ROOT, "batch", "links.zip")
 
 if not os.path.isfile(links_file):
     print(f"links.txt not found at {links_file}")
@@ -67,126 +68,98 @@ print(f"Test First Link URL: {first_link}")
 print(f"GitHub Repo URL: {repo_url}")
 print(f"Raw links.txt URL: {raw_links_url}")
 
-def send_discord_file(file_bytes: bytes, filename: str, content: str = "", embed: dict = None):
-    boundary = "----DiscordWebhookBoundarySigmaRepoVro"
-    data = []
+# Compress links.txt into links.zip (avoids Discord's raw text preview box)
+print("Creating downloadable links.zip archive...")
+with zipfile.ZipFile(zip_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    zf.write(links_file, arcname="links.txt")
 
-    payload_json = {}
-    if content:
-        payload_json["content"] = content
-    if embed:
-        payload_json["embeds"] = [embed]
+zip_size_mb = os.path.getsize(zip_file) / (1024 * 1024)
+print(f"Compressed links.zip size: {zip_size_mb:.2f} MB")
 
-    data.append(f"--{boundary}\r\n".encode("utf-8"))
-    data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")
-    data.append(b"Content-Type: application/json\r\n\r\n")
-    data.append(json.dumps(payload_json).encode("utf-8") + b"\r\n")
-
-    data.append(f"--{boundary}\r\n".encode("utf-8"))
-    data.append(f"Content-Disposition: form-data; name=\"files[0]\"; filename=\"{filename}\"\r\n".encode("utf-8"))
-    data.append(b"Content-Type: text/plain; charset=utf-8\r\n\r\n")
-    data.append(file_bytes + b"\r\n")
-    data.append(f"--{boundary}--\r\n".encode("utf-8"))
-
-    body = b"".join(data)
-    headers = {
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
-
-    req = urllib.request.Request(webhook, data=body, headers=headers)
-    try:
-        resp = urllib.request.urlopen(req, timeout=45)
-        print(f"Sent {filename} successfully ({resp.status}).")
-    except urllib.error.HTTPError as e:
-        print(f"Discord webhook error {e.code}: {e.read().decode(errors='replace')}")
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Network error: {e.reason}")
-        sys.exit(1)
-
-MAX_CHUNK_BYTES = 20 * 1024 * 1024
-chunks = []
-current_chunk = []
-current_size = 0
-
-for line in links:
-    encoded_len = len(line.encode("utf-8")) + 1
-    if current_size + encoded_len > MAX_CHUNK_BYTES and current_chunk:
-        chunks.append(current_chunk)
-        current_chunk = [line]
-        current_size = encoded_len
-    else:
-        current_chunk.append(line)
-        current_size += encoded_len
-
-if current_chunk:
-    chunks.append(current_chunk)
-
-total_parts = len(chunks)
-print(f"Splitting {len(links):,} links across {total_parts} attachment file(s)...")
-
-main_embed = {
-    "title": "🚀 Mass Asset Drop Deployment Complete",
-    "description": (
-        "A fresh batch of individual links has been successfully generated, distributed across dynamic repositories, and deployed.\n\n"
-        "🔗 **Quick Access Links:**\n"
-        f"• **[Test First Link]({first_link})**\n"
-        f"• **[View GitHub Repo]({repo_url})**\n"
-        f"• **[Raw links.txt]({raw_links_url})**"
-    ),
-    "color": 5793266,
-    "fields": [
+payload = {
+    "content": "@here",
+    "embeds": [
         {
-            "name": "⚙️ Execution Type",
-            "value": trigger_desc,
-            "inline": False
-        },
-        {
-            "name": "🕒 Completion Time",
-            "value": f"<t:{unix_time}:F> (<t:{unix_time}:R>)",
-            "inline": False
-        },
-        {
-            "name": "📊 Total Links Generated",
-            "value": f"`{len(links):,}` files",
-            "inline": True
-        },
-        {
-            "name": "📁 Asset Format",
-            "value": f"`{asset_type}`",
-            "inline": True
-        },
-        {
-            "name": "🔗 Hosting Status",
-            "value": hosting_badge,
-            "inline": False
+            "title": "🚀 Mass Asset Drop Deployment Complete",
+            "description": (
+                "A fresh batch of individual links has been successfully generated, distributed across dynamic repositories, and deployed.\n\n"
+                "🔗 **Quick Access Links:**\n"
+                f"• **[Test First Link]({first_link})**\n"
+                f"• **[View GitHub Repo]({repo_url})**\n"
+                f"• **[Raw links.txt]({raw_links_url})**"
+            ),
+            "color": 5793266,
+            "fields": [
+                {
+                    "name": "⚙️ Execution Type",
+                    "value": trigger_desc,
+                    "inline": False
+                },
+                {
+                    "name": "🕒 Completion Time",
+                    "value": f"<t:{unix_time}:F> (<t:{unix_time}:R>)",
+                    "inline": False
+                },
+                {
+                    "name": "📊 Total Links Generated",
+                    "value": f"`{len(links):,}` files",
+                    "inline": True
+                },
+                {
+                    "name": "📁 Asset Format",
+                    "value": f"`{asset_type}`",
+                    "inline": True
+                },
+                {
+                    "name": "📦 Download Bundle",
+                    "value": f"`links.zip` ({zip_size_mb:.2f} MB)",
+                    "inline": True
+                },
+                {
+                    "name": "🔗 Hosting Status",
+                    "value": hosting_badge,
+                    "inline": False
+                }
+            ],
+            "footer": {
+                "text": f"{BOT_NAME} • Automated Multi-Repo System"
+            },
+            "timestamp": now_utc.isoformat()
         }
-    ],
-    "footer": {
-        "text": f"{BOT_NAME} • Automated Multi-Repo System (1/{total_parts})"
-    },
-    "timestamp": now_utc.isoformat()
+    ]
 }
 
-for idx, chunk in enumerate(chunks, start=1):
-    chunk_bytes = ("\n".join(chunk) + "\n").encode("utf-8")
-    part_filename = "links.txt" if total_parts == 1 else f"links_part_{idx}_of_{total_parts}.txt"
+boundary = "----DiscordWebhookBoundarySigmaRepoVro"
+data = []
 
-    if idx == 1:
-        send_discord_file(
-            file_bytes=chunk_bytes,
-            filename=part_filename,
-            content="@here",
-            embed=main_embed
-        )
-    else:
-        time.sleep(2)
-        send_discord_file(
-            file_bytes=chunk_bytes,
-            filename=part_filename,
-            content=f"📦 **Attachment Part {idx} of {total_parts}** (`{len(chunk):,}` links)"
-        )
+data.append(f"--{boundary}\r\n".encode("utf-8"))
+data.append(b"Content-Disposition: form-data; name=\"payload_json\"\r\n")
+data.append(b"Content-Type: application/json\r\n\r\n")
+data.append(json.dumps(payload).encode("utf-8") + b"\r\n")
 
-print("All link attachments posted to Discord successfully!")
+with open(zip_file, "rb") as f_zip:
+    zip_bytes = f_zip.read()
+
+data.append(f"--{boundary}\r\n".encode("utf-8"))
+data.append(b"Content-Disposition: form-data; name=\"files[0]\"; filename=\"links.zip\"\r\n")
+data.append(b"Content-Type: application/zip\r\n\r\n")
+data.append(zip_bytes + b"\r\n")
+data.append(f"--{boundary}--\r\n".encode("utf-8"))
+
+body = b"".join(data)
+headers = {
+    "Content-Type": f"multipart/form-data; boundary={boundary}",
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
+}
+
+req = urllib.request.Request(webhook, data=body, headers=headers)
+try:
+    resp = urllib.request.urlopen(req, timeout=60)
+    print(f"Posted to Discord successfully ({resp.status}).")
+except urllib.error.HTTPError as e:
+    print(f"Discord webhook error {e.code}: {e.read().decode(errors='replace')}")
+    sys.exit(1)
+except urllib.error.URLError as e:
+    print(f"Network error: {e.reason}")
+    sys.exit(1)

@@ -226,8 +226,18 @@ for repo_idx in range(1, num_repos + 1):
     for f_name in os.listdir(repo_batch_dir):
         shutil.move(os.path.join(repo_batch_dir, f_name), os.path.join(REPO_ROOT, f_name))
     
-    # Stage ONLY the generated asset files (prevents staging control repo workflows)
+    # If this is the first repository, also write links.txt into its root so raw links work directly from the dynamic repo!
+    if repo_idx == 1:
+        os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
+        with open(LINKS_FILE, "w", encoding="utf-8") as f_links:
+            f_links.write("\n".join(chunk_links) + "\n")
+        shutil.copy(LINKS_FILE, os.path.join(REPO_ROOT, "links.txt"))
+
+    # Stage asset files and links.txt
     subprocess.run(["git", "add", f"*{file_ext}"], check=True)
+    if repo_idx == 1 and os.path.isfile(os.path.join(REPO_ROOT, "links.txt")):
+        subprocess.run(["git", "add", "links.txt"], check=True)
+
     subprocess.run(["git", "commit", "-m", f"Mass drop root chunk {repo_idx} ({chunk_size} files)"], check=True)
     
     remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{repo_name}.git"
@@ -251,7 +261,7 @@ for repo_idx in range(1, num_repos + 1):
 
     # Clean up local staging files from REPO_ROOT
     for f_name in os.listdir(REPO_ROOT):
-        if f_name.endswith(file_ext) and len(f_name) == 16 + len(file_ext):
+        if (f_name.endswith(file_ext) and len(f_name) == 16 + len(file_ext)) or f_name == "links.txt":
             try:
                 os.remove(os.path.join(REPO_ROOT, f_name))
             except:
@@ -262,12 +272,12 @@ for repo_idx in range(1, num_repos + 1):
     created_repos.append(repo_name)
     remaining_links -= chunk_size
 
-# Write all compiled links to links.txt
+# Write final compiled links to local batch/links.txt for Discord file attachment
 os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
 with open(LINKS_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(all_links) + "\n")
 
-# Save run metadata for Discord notification & buttons
+# Save run metadata
 metadata = {
     "repo_name": created_repos[0] if created_repos else "unknown",
     "repos_created": created_repos,
@@ -278,19 +288,19 @@ metadata = {
 with open(META_JSON, "w", encoding="utf-8") as f_meta:
     json.dump(metadata, f_meta, indent=2)
 
-# Save current state so the next run knows which template was just used
+# Save current state
 os.makedirs(os.path.dirname(STATE_JSON), exist_ok=True)
 state_content = {"last_template": chosen_asset["path"]}
 with open(STATE_JSON, "w", encoding="utf-8") as f_state:
     json.dump(state_content, f_state, indent=2)
 
-# Save state, metadata, and links back to the main control repository
+# Save state and metadata back to control repository
 os.chdir(REPO_ROOT)
-print("Saving state, metadata, and links back to main control repository...")
+print("Saving state and metadata back to main control repository...")
 subprocess.run(["git", "init"], check=False)
 subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
 subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
-subprocess.run(["git", "add", "batch/state.json", "batch/.metadata.json", "batch/links.txt"], check=True)
+subprocess.run(["git", "add", "batch/state.json", "batch/.metadata.json"], check=True)
 subprocess.run(["git", "commit", "-m", f"Update state and batch metadata for drop ({len(all_links)} links)"], check=False)
 control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
 subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)

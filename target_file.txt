@@ -1,1 +1,1 @@
-gust.svg
+eclipse.svg

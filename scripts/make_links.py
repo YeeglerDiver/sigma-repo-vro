@@ -33,6 +33,7 @@ LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 PREFIX_FILE = os.path.join(REPO_ROOT, "repo_prefix.txt")
 AMOUNT_FILE = os.path.join(REPO_ROOT, "amount.txt")
 TYPE_FILE = os.path.join(REPO_ROOT, "type.txt")
+TARGET_FILE = os.path.join(REPO_ROOT, "target_file.txt")
 FILE_WORDS_FILE = os.path.join(REPO_ROOT, "file_words.txt")
 META_JSON = os.path.join(REPO_ROOT, "batch", ".metadata.json")
 STATE_JSON = os.path.join(REPO_ROOT, "batch", "state.json")
@@ -60,6 +61,18 @@ if os.path.isfile(TYPE_FILE):
                 allowed_exts = (".html",)
     except Exception as e:
         print(f"Warning: Could not parse type.txt: {e}")
+
+# Read target file preference if specified
+explicit_target_name = None
+if os.path.isfile(TARGET_FILE):
+    try:
+        with open(TARGET_FILE, "r", encoding="utf-8") as f_target:
+            target_val = f_target.read().strip()
+            if target_val:
+                explicit_target_name = target_val
+                print(f"Loaded specific target asset preference from target_file.txt: '{explicit_target_name}'")
+    except Exception as e:
+        print(f"Warning: Could not parse target_file.txt: {e}")
 
 asset_word_pool = []
 if os.path.isfile(FILE_WORDS_FILE):
@@ -113,14 +126,32 @@ if not upstream_assets:
     print(f"No matching files found in upstream repository '{UPSTREAM}'.")
     sys.exit(1)
 
-filtered_assets = upstream_assets
-if last_template:
-    temp_filtered = [p for p in upstream_assets if p["path"] != last_template]
-    if temp_filtered:
-        filtered_assets = temp_filtered
+# Check if explicit target requested exists in upstream tree
+chosen_asset = None
+if explicit_target_name:
+    matched = [
+        p for p in tree
+        if p["type"] == "blob" and (
+            p["path"].lower() == explicit_target_name.lower() or
+            os.path.basename(p["path"]).lower() == explicit_target_name.lower()
+        )
+    ]
+    if matched:
+        chosen_asset = matched[0]
+        print(f"Found explicit match for target: {chosen_asset['path']}")
+    else:
+        print(f"Warning: Target '{explicit_target_name}' not found in upstream. Falling back to pool.")
 
-random.shuffle(filtered_assets)
-chosen_asset = random.choice(filtered_assets)
+if not chosen_asset:
+    filtered_assets = upstream_assets
+    if last_template:
+        temp_filtered = [p for p in upstream_assets if p["path"] != last_template]
+        if temp_filtered:
+            filtered_assets = temp_filtered
+
+    random.shuffle(filtered_assets)
+    chosen_asset = random.choice(filtered_assets)
+
 print(f"Chosen template for this run: {chosen_asset['path']}")
 
 file_ext = os.path.splitext(chosen_asset["path"])[1].lower()

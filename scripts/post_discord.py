@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
+import datetime
 import json
 import os
 import sys
-import datetime
 import urllib.error
 import urllib.request
 
 BOT_NAME = "link-dropper"
+GH_USER = "YeeglerDiver"
+CONTROL_REPO = "sigma-repo-vro"
 
 webhook = os.environ.get("WEBHOOK")
 if not webhook:
     print("No webhook set, skipping.")
     sys.exit(0)
 
-links_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "batch", "links.txt")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+links_file = os.path.join(REPO_ROOT, "batch", "links.txt")
+meta_file = os.path.join(REPO_ROOT, "batch", ".metadata.json")
+
 if not os.path.isfile(links_file):
     print(f"links.txt not found at {links_file}")
     sys.exit(1)
@@ -25,20 +30,48 @@ if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
-# Detect if the drop was HTML (GitHub Pages) or SVG (jsDelivr CDN) based on the first link
-is_html = ".github.io" in links[0]
+# Load metadata if available for repo name and first link
+meta = {}
+if os.path.isfile(meta_file):
+    try:
+        with open(meta_file, "r", encoding="utf-8") as fm:
+            meta = json.load(fm)
+    except Exception:
+        pass
+
+first_link = meta.get("first_link") or links[0]
+repo_name = meta.get("repo_name") or f"{GH_USER}-drop"
+
+# Detect if the drop was HTML (GitHub Pages) or SVG (jsDelivr CDN)
+is_html = ".github.io" in first_link
 asset_type = "HTML (Live GitHub Pages)" if is_html else "SVG (jsDelivr CDN)"
 hosting_badge = "🌐 Live Interactive Site" if is_html else "⚡ Fast CDN Delivery"
 
-# Get current UTC time for the embed timestamp
-now_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
+# Get current time and Unix timestamp for Discord's dynamic local formatting
+now_utc = datetime.datetime.now(datetime.timezone.utc)
+unix_time = int(now_utc.timestamp())
+
+event_name = os.environ.get("GITHUB_EVENT_NAME", "unknown")
+
+if event_name == "workflow_dispatch":
+    trigger_desc = "👤 **Manual Run** (Triggered via Actions tab)"
+else:
+    hour = now_utc.hour
+    run_slot = (hour // 3) + 1
+    if run_slot > 8:
+        run_slot = 8
+    trigger_desc = f"⏰ **Scheduled Run** (Daily Run #{run_slot} of 8)"
 
 boundary = "----DiscordWebhookBoundarySigmaRepoVro"
 data = []
 
-# Rich Embed Payload design
+# URLs for Discord buttons
+repo_url = f"https://github.com/{GH_USER}/{repo_name}"
+raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{CONTROL_REPO}/main/batch/links.txt"
+
+# Rich Embed Payload design with Discord Buttons (Components) & Dynamic Local Time
 payload = {
-    "content": "@here",  # Triggers the notification ping cleanly
+    "content": "@here",  # Triggers notification ping
     "embeds": [
         {
             "title": "🚀 Mass Asset Drop Deployment Complete",
@@ -46,12 +79,22 @@ payload = {
             "color": 5793266,  # Vibrant Cyan/Blue Accent
             "fields": [
                 {
+                    "name": "⚙️ Execution Type",
+                    "value": trigger_desc,
+                    "inline": False
+                },
+                {
+                    "name": "🕒 Completion Time",
+                    "value": f"<t:{unix_time}:F> (<t:{unix_time}:R>)",
+                    "inline": False
+                },
+                {
                     "name": "📊 Total Links Generated",
                     "value": f"`{len(links):,}` files",
                     "inline": True
                 },
                 {
-                    "name": "⚙️ Asset Format",
+                    "name": "📁 Asset Format",
                     "value": f"`{asset_type}`",
                     "inline": True
                 },
@@ -59,17 +102,37 @@ payload = {
                     "name": "🔗 Hosting Status",
                     "value": hosting_badge,
                     "inline": False
-                },
-                {
-                    "name": "📥 Attached File",
-                    "value": "The complete list of generated links (`links.txt`) is attached below for easy access.",
-                    "inline": False
                 }
             ],
             "footer": {
                 "text": f"{BOT_NAME} • Automated Multi-Repo System"
             },
-            "timestamp": now_utc
+            "timestamp": now_utc.isoformat()
+        }
+    ],
+    "components": [
+        {
+            "type": 1,  # Action Row
+            "components": [
+                {
+                    "type": 2,  # Button
+                    "style": 5,  # Link button style
+                    "label": "Test First Link",
+                    "url": first_link
+                },
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "View GitHub Repo",
+                    "url": repo_url
+                },
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "Raw links.txt",
+                    "url": raw_links_url
+                }
+            ]
         }
     ]
 }

@@ -23,23 +23,28 @@ if not os.path.isfile(links_file):
     sys.exit(1)
 
 with open(links_file, "r", encoding="utf-8") as f:
-    links = [l for l in f.read().splitlines() if l.strip()]
+    links = [l.strip() for l in f.read().splitlines() if l.strip()]
 
 if not links:
     print("links.txt is empty, nothing to post.")
     sys.exit(0)
 
-# Load metadata for repo name and first link
+# Load metadata robustly
 meta = {}
 if os.path.isfile(meta_file):
     try:
         with open(meta_file, "r", encoding="utf-8") as fm:
             meta = json.load(fm)
-    except Exception:
-        pass
+            print(f"Successfully loaded metadata: {meta}")
+    except Exception as e:
+        print(f"Warning: Could not parse .metadata.json: {e}")
 
 first_link = meta.get("first_link") or links[0]
 repo_name = meta.get("repo_name") or f"{GH_USER}-drop"
+
+# Ensure URLs are clean and stripped of any accidental whitespace/newlines
+first_link = first_link.strip()
+repo_name = repo_name.strip()
 
 # Detect if the drop was HTML (GitHub Pages) or SVG (jsDelivr CDN)
 is_html = ".github.io" in first_link
@@ -64,11 +69,15 @@ else:
 boundary = "----DiscordWebhookBoundarySigmaRepoVro"
 data = []
 
-# URLs for clickable inline links pointing directly to the dynamic repo
-repo_url = f"https://github.com/{GH_USER}/{repo_name}"
-raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/links.txt"
+# URLs for clean clickable inline links
+repo_url = f"https://github.com/{GH_USER}/{repo_name}".strip()
+raw_links_url = f"https://raw.githubusercontent.com/{GH_USER}/{repo_name}/main/links.txt".strip()
 
-# Rich Embed Payload design with clickable markdown links in the description
+print(f"Test First Link URL: {first_link}")
+print(f"GitHub Repo URL: {repo_url}")
+print(f"Raw links.txt URL: {raw_links_url}")
+
+# Rich Embed Payload design with clean markdown inline links and all fields intact
 payload = {
     "content": "@here",  # Triggers notification ping
     "embeds": [
@@ -77,9 +86,9 @@ payload = {
             "description": (
                 "A fresh batch of individual links has been successfully generated, distributed across dynamic repositories, and deployed.\n\n"
                 "🔗 **Quick Access Links:**\n"
-                f"• [Test First Link]({first_link})\n"
-                f"• [View GitHub Repo]({repo_url})\n"
-                f"• [Raw links.txt]({raw_links_url})"
+                f"• **[Test First Link]({first_link})**\n"
+                f"• **[View GitHub Repo]({repo_url})**\n"
+                f"• **[Raw links.txt]({raw_links_url})**"
             ),
             "color": 5793266,  # Vibrant Cyan/Blue Accent
             "fields": [

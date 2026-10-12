@@ -257,7 +257,7 @@ for repo_idx in range(1, num_repos + 1):
     remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{repo_name}.git"
     subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
     
-    push_result = subprocess.run(["git", "push", "-u", "origin", "main", `--force`])
+    push_result = subprocess.run(["git", "push", "-u", "origin", "main", "--force"])
     if push_result.returncode != 0:
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)

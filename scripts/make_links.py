@@ -36,6 +36,7 @@ LINKS_FILE = os.path.join(REPO_ROOT, "batch", "links.txt")
 PREFIX_FILE = os.path.join(REPO_ROOT, "repo_prefix.txt")
 AMOUNT_FILE = os.path.join(REPO_ROOT, "amount.txt")
 TYPE_FILE = os.path.join(REPO_ROOT, "type.txt")
+FILE_WORDS_FILE = os.path.join(REPO_ROOT, "file_words.txt")
 META_JSON = os.path.join(REPO_ROOT, "batch", ".metadata.json")
 STATE_JSON = os.path.join(REPO_ROOT, "batch", "state.json")
 
@@ -67,6 +68,16 @@ if os.path.isfile(TYPE_FILE):
     except Exception as e:
         print(f"Warning: Could not parse type.txt, allowing both .svg and .html: {e}")
 
+# Load custom words for file naming from file_words.txt if available
+asset_word_pool = []
+if os.path.isfile(FILE_WORDS_FILE):
+    try:
+        with open(FILE_WORDS_FILE, "r", encoding="utf-8") as f_fw:
+            asset_word_pool = [w.strip().lower() for w in re.findall(r'[a-zA-Z0-9]+', f_fw.read()) if w.strip()]
+            print(f"Loaded {len(asset_word_pool)} words from file_words.txt for asset naming.")
+    except Exception as e:
+        print(f"Warning: Could not parse file_words.txt: {e}")
+
 # 1. Load previous run state to avoid repeating the same template file
 last_template = None
 if os.path.isfile(STATE_JSON):
@@ -91,16 +102,7 @@ if os.path.isfile(PREFIX_FILE):
             chosen_words = random.sample(words, num_to_pick)
             custom_prefix = "-".join(chosen_words)
 
-# Determine time slot based on current UTC hour
 now_utc = datetime.datetime.now(datetime.timezone.utc)
-hour = now_utc.hour
-if hour < 11:
-    time_slot = "morning"
-elif hour < 16:
-    time_slot = "midday"
-else:
-    time_slot = "afternoon"
-
 date_str = now_utc.strftime("%Y%m%d")
 
 # 2. Fetch upstream tree and pick a random asset matching allowed_exts from the root
@@ -168,7 +170,9 @@ remaining_links = TOTAL_LINKS
 for repo_idx in range(1, num_repos + 1):
     chunk_size = min(MAX_PER_REPO, remaining_links)
     rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
-    repo_name = f"{custom_prefix}-{date_str}-{time_slot}-{repo_idx}-{rand_suffix}"
+    
+    # Clean repository name (no time slot or chunk clutter)
+    repo_name = f"{custom_prefix}-{date_str}-{rand_suffix}"
     
     print(f"\n--- Processing Repo {repo_idx}/{num_repos}: {repo_name} ({chunk_size:,} files) ---")
     
@@ -197,8 +201,18 @@ for repo_idx in range(1, num_repos + 1):
     chunk_links = []
     
     for _ in range(chunk_size):
-        rand_hash = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
-        filename = f"{rand_hash}{file_ext}"
+        # Generate custom filename using file_words.txt if available, else fallback to random hash
+        if asset_word_pool and len(asset_word_pool) >= 2:
+            chosen_words = random.sample(asset_word_pool, min(2, len(asset_word_pool)))
+            file_rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+            filename = f"{'-'.join(chosen_words)}-{file_rand_suffix}{file_ext}"
+        elif asset_word_pool:
+            file_rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            filename = f"{random.choice(asset_word_pool)}-{file_rand_suffix}{file_ext}"
+        else:
+            rand_hash = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+            filename = f"{rand_hash}{file_ext}"
+
         local_file_path = os.path.join(repo_batch_dir, filename)
         
         with open(local_file_path, "wb") as f_out:
@@ -226,7 +240,7 @@ for repo_idx in range(1, num_repos + 1):
     for f_name in os.listdir(repo_batch_dir):
         shutil.move(os.path.join(repo_batch_dir, f_name), os.path.join(REPO_ROOT, f_name))
     
-    # If this is the first repository, also write links.txt into its root so raw links work directly from the dynamic repo!
+    # If this is the first repository, also write links.txt into its root
     if repo_idx == 1:
         os.makedirs(os.path.dirname(LINKS_FILE), exist_ok=True)
         with open(LINKS_FILE, "w", encoding="utf-8") as f_links:
@@ -243,7 +257,7 @@ for repo_idx in range(1, num_repos + 1):
     remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/{repo_name}.git"
     subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
     
-    push_result = subprocess.run(["git", "push", "-u", "origin", "main", "--force"])
+    push_result = subprocess.run(["git", "push", "-u", "origin", "main", `--force`])
     if push_result.returncode != 0:
         print(f"Error: Git push failed for {repo_name}!")
         sys.exit(1)
@@ -261,7 +275,7 @@ for repo_idx in range(1, num_repos + 1):
 
     # Clean up local staging files from REPO_ROOT
     for f_name in os.listdir(REPO_ROOT):
-        if (f_name.endswith(file_ext) and len(f_name) == 16 + len(file_ext)) or f_name == "links.txt":
+        if (f_name.endswith(file_ext)) or f_name == "links.txt":
             try:
                 os.remove(os.path.join(REPO_ROOT, f_name))
             except:
@@ -288,4 +302,21 @@ metadata = {
 with open(META_JSON, "w", encoding="utf-8") as f_meta:
     json.dump(metadata, f_meta, indent=2)
 
-print(f"Successfully generated metadata pointing to repo: {metadata['repo_name']}")
+# Save current state
+os.makedirs(os.path.dirname(STATE_JSON), exist_ok=True)
+state_content = {"last_template": chosen_asset["path"]}
+with open(STATE_JSON, "w", encoding="utf-8") as f_state:
+    json.dump(state_content, f_state, indent=2)
+
+# Save state and metadata back to control repository
+os.chdir(REPO_ROOT)
+print("Saving state and metadata back to main control repository...")
+subprocess.run(["git", "init"], check=False)
+subprocess.run(["git", "config", "user.name", "link-dropper"], check=True)
+subprocess.run(["git", "config", "user.email", "link-dropper@users.noreply.github.com"], check=True)
+subprocess.run(["git", "add", "batch/state.json", "batch/.metadata.json"], check=True)
+subprocess.run(["git", "commit", "-m", f"Update state and batch metadata for drop ({len(all_links)} links)"], check=False)
+control_remote = f"https://x-access-token:{GH_PAT}@github.com/{GH_USER}/sigma-repo-vro.git"
+subprocess.run(["git", "push", control_remote, "HEAD:main"], check=False)
+
+print(f"\nSuccessfully generated {len(all_links):,} total links across {len(created_repos)} repositories!")

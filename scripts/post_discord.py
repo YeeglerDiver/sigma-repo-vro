@@ -10,6 +10,9 @@ import zipfile
 BOT_NAME = "link-dropper"
 GH_USER = "YeeglerDiver"
 
+# Role ID configured for @Links Ping
+ROLE_ID = "1559751662212751390"
+
 webhook = os.environ.get("WEBHOOK")
 if not webhook:
     print("No webhook set, skipping.")
@@ -77,7 +80,10 @@ zip_size_mb = os.path.getsize(zip_file) / (1024 * 1024)
 print(f"Compressed links.zip size: {zip_size_mb:.2f} MB")
 
 payload = {
-    "content": "@here",
+    "content": f"<@&{ROLE_ID}>",
+    "allowed_mentions": {
+        "roles": [ROLE_ID]
+    },
     "embeds": [
         {
             "title": "🚀 Mass Asset Drop Deployment Complete",
